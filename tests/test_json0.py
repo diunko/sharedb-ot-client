@@ -100,23 +100,3 @@ def test_transform_basic():
     assert d1 == d2
     assert d1['some']['thing']['other']['qux'] == 'left'
 
-
-def transform_draft():
-    doc = ['initial']
-
-    op_A, op_B = [['a'], ['b']]
-
-    # apply(apply(snapshot, op1), transform(op2, op1, 'left'))
-    #   == apply(apply(snapshot, op2), transform(op1, op2, 'right'))
-    assert apply(apply(doc, op_A), transform(op_B, op_A, 'left')) \
-           == apply(apply(doc, op_B), transform(op_A, op_B, 'right'))
-
-    l0, r0 = [[1], [2]]
-    l1 = self.transform(l0, r0, '<-')
-
-    r1 = self.transform(l0, r0, '->')
-
-    doc = ['initial']
-
-    self.apply(self.apply(doc, l0), r1)
-    self.apply(self.apply(doc, r0), l1)
