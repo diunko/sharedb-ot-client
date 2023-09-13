@@ -1,6 +1,8 @@
-from delta import Delta
+import asyncio
 from dataclasses import dataclass, field
 from typing import Optional, Any, Union
+
+from delta import Delta
 from sharedb.json0 import Json0, Op
 
 Path = list[Union[str, int]]
@@ -11,54 +13,68 @@ class OpSubscription:
     def __init__(self, doc: 'Doc'):
         self._doc = doc
         self._root = doc.data
-        self._ref = doc.doc.data
+        # self._ref = doc.data
         self._path = []
+        self._push_q: asyncio.Queue = asyncio.Queue()
 
     def __getattr__(self, item):
-        if item == '_':
-            pass
-        if item == '_ref':
-            pass
-
-        self.path.append(item)
+        self._path.append(item)
         return self
 
-    def match(self, path: Path):
-        matched = False
-        _ref = self._doc
+    def match(self, path: Path, op: Op):
+        print('==== mathing p against m')
+        print('== m', self._path)
+        print('== p', path)
+
+        matched = True
+        _ref = self._doc.data
         indices = []
-        for i, (m, p) in enumerate(zip(self._path, path)):
+        current = _ref
+        i_m, i_p = 0, 0
+        while i_m < len(self._path) and i_p < len(path):
+            m = self._path[i_m]
+            p = path[i_p]
             # m is from matcher
             # p is from op path
+            print('i_m, m', i_m, m)
+            print('i_p, p', i_p, p)
+
             if m == '_':
-                indices.append(i)
-                # this is a match
+                indices.append(p)
             elif m == '_ref':
+                # just store reference to current data node, continue matching
                 _ref = current
+                i_m += 1
                 continue
-                # go to next component
-            elif m == p:
-                # this is a match
-                matched = True
+            elif m != p:
+                matched = False
                 break
-                # something
-        if matched:
-            match = (indices, (v0, v1), _ref)
-            return match
-        else:
+            else:
+                assert m == p
+
+            i_m += 1
+            i_p += 1
+            current = current[p]
+
+        if not matched:
             return None
 
-    async def ops_stream(self):
-        in_msg = yield -1
-        op = None
-        while in_msg != -112:
-            in_msg = yield op
-            op = in_msg
+        return op, (indices, _ref)
 
-    def notify(self):
-        notifier = self.ops_stream()
-        self._doc.subscriptions.append(notifier)
-        return notifier
+    async def read_stream(self):
+        print('read_stream: start')
+        while (op := await self._push_q.get()) is not None:
+            print('read_stream: got op', op)
+            yield op
+
+    def notify_op(self, op: Op):
+        print('notify_op called', op)
+        if m := self.match(op.p, op):
+            self._push_q.put_nowait(m)
+
+    def subscribe(self):
+        self._doc.subscriptions.append(self.notify_op)
+        return self.read_stream()
 
 
 @dataclass
@@ -92,17 +108,16 @@ class Doc:
 
     def _push_op(self, ops: list[Op]):
         # rebase op by the ops waiting to be sent in buffer
+
         # apply rebased op
-        #
-        pass
+        Json0.apply(self.data, ops)
+
+        for op in ops:
+            for sub in self.subscriptions:
+                sub(op)
 
     def on(self):
         return OpSubscription(self)
-
-    async def ops_match_notify(self, op_ref: OpSubscription):
-        for op in self.ops:
-            if match := op_ref.match(op.p):
-                yield match
 
 
 def _set_in(ref: dict, path: Path, v: Any):
