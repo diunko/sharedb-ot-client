@@ -7,6 +7,7 @@ from sharedb.json0 import Json0, Op
 
 Path = list[Union[str, int]]
 
+DEBUG = False
 
 # noinspection PyUnresolvedReferences
 class OpSubscription:
@@ -22,9 +23,9 @@ class OpSubscription:
         return self
 
     def match(self, path: Path, op: Op):
-        print('==== mathing p against m')
-        print('== m', self._path)
-        print('== p', path)
+        DEBUG and print('==== mathing p against m')
+        DEBUG and print('== m', self._path)
+        DEBUG and print('== p', path)
 
         matched = True
         _ref = self._doc.data
@@ -36,8 +37,8 @@ class OpSubscription:
             p = path[i_p]
             # m is from matcher
             # p is from op path
-            print('i_m, m', i_m, m)
-            print('i_p, p', i_p, p)
+            DEBUG and print('i_m, m', i_m, m)
+            DEBUG and print('i_p, p', i_p, p)
 
             if m == '_':
                 indices.append(p)
@@ -62,13 +63,13 @@ class OpSubscription:
         return op, (indices, _ref)
 
     async def read_stream(self):
-        print('read_stream: start')
+        DEBUG and print('read_stream: start')
         while (op := await self._push_q.get()) is not None:
-            print('read_stream: got op', op)
+            DEBUG and print('read_stream: got op', op)
             yield op
 
     def notify_op(self, op: Op):
-        print('notify_op called', op)
+        DEBUG and print('notify_op called', op)
         if m := self.match(op.p, op):
             self._push_q.put_nowait(m)
 
