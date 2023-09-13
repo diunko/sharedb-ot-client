@@ -1,6 +1,6 @@
 import asyncio
 from dataclasses import dataclass, field
-from typing import Optional, Any, Union
+from typing import Optional, Any, Union, Tuple
 
 from delta import Delta
 from sharedb.json0 import Json0, Op
@@ -9,12 +9,13 @@ Path = list[Union[str, int]]
 
 DEBUG = False
 
-# noinspection PyUnresolvedReferences
+Match = Tuple[Op, Tuple[(Indices := list), (_Ref := Union[list, dict])]]
+
+
 class OpSubscription:
     def __init__(self, doc: 'Doc'):
         self._doc = doc
         self._root = doc.data
-        # self._ref = doc.data
         self._path = []
         self._push_q: asyncio.Queue = asyncio.Queue()
 
@@ -22,7 +23,7 @@ class OpSubscription:
         self._path.append(item)
         return self
 
-    def match(self, path: Path, op: Op):
+    def match(self, path: Path, op: Op) -> Optional[Match]:
         DEBUG and print('==== mathing p against m')
         DEBUG and print('== m', self._path)
         DEBUG and print('== p', path)

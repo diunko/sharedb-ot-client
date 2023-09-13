@@ -6,7 +6,6 @@ from sharedb.doc import Doc, Op
 
 
 @pytest.mark.asyncio
-# noinspection PyUnresolvedReferences
 async def test_doc_subscription_basic():
     d = Doc.create({
         'items': [
