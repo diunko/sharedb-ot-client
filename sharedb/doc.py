@@ -7,7 +7,7 @@ Path = list[Union[str, int]]
 
 
 # noinspection PyUnresolvedReferences
-class OpRef:
+class OpSubscription:
     def __init__(self, doc: 'Doc'):
         self._doc = doc
         self._root = doc.data
@@ -61,11 +61,34 @@ class OpRef:
         return notifier
 
 
-# noinspection PyUnresolvedReferences
+@dataclass
 class Doc:
+    data: dict = field(default_factory=dict)
+    ops: list[Op] = field(default_factory=list)
+    subscriptions: list = field(default_factory=list)
 
-    def __init__(self):
-        self.subscriptions = []
+    @classmethod
+    def create(cls, d: dict):
+        doc = Doc(data=d)
+        return doc
+
+    def __getitem__(self, k):
+        if isinstance(k, (list, tuple)):
+            path = k
+        elif isinstance(k, (int, str)):
+            path = [k]
+        else:
+            assert False, "bad type match"
+        return _get_in(self.data, path)
+
+    def __setitem__(self, k, v):
+        if isinstance(k, (list, tuple)):
+            path = k
+        elif isinstance(k, (int, str)):
+            path = [k]
+        else:
+            assert False, "bad type match"
+        return _set_in(self.data, path, v)
 
     def _push_op(self, ops: list[Op]):
         # rebase op by the ops waiting to be sent in buffer
@@ -74,10 +97,24 @@ class Doc:
         pass
 
     def on(self):
-        return OpRef(self)
+        return OpSubscription(self)
 
-    async def ops_match_notify(self, op_ref: OpRef):
-        async for op in self._ops():
+    async def ops_match_notify(self, op_ref: OpSubscription):
+        for op in self.ops:
             if match := op_ref.match(op.p):
                 yield match
 
+
+def _set_in(ref: dict, path: Path, v: Any):
+    k = path[-1]
+    for i in range(len(path) - 1):
+        p = path[i]
+        ref = ref[p]
+    ref[k] = v
+    return v
+
+
+def _get_in(ref: dict, path: Path):
+    for p in path:
+        ref = ref[p]
+    return ref

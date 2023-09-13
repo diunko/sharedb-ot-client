@@ -1,4 +1,4 @@
-from sharedb.doc import Doc
+from sharedb.doc import Doc, Op
 
 
 # noinspection PyUnresolvedReferences
