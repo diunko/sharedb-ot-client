@@ -1,4 +1,5 @@
 import asyncio
+import random
 
 import pytest
 import logging
@@ -16,6 +17,7 @@ log = logging.getLogger('test_conn')
 @pytest.mark.asyncio
 async def test_doc_create():
     log.debug('==== test started ====')
+    rand_id = str(random.randint(1000000, 2000000))
 
     url = 'ws://localhost:17171'
 
@@ -25,7 +27,7 @@ async def test_doc_create():
 
     # TODO: what if doc is already there?
     doc = await conn.create_doc(
-        doc_id='testing', coll_id='collection-bla',
+        doc_id='testing-' + rand_id, coll_id='collection-bla',
         data={
             'qux': 'bla',
             'test': 'foo'
@@ -49,3 +51,6 @@ async def test_doc_create():
     print('got ack', ack_msg)
 
     await conn._conn.close()
+
+    assert doc.v == 4
+    assert doc.data == {'qux': 'bla4', 'test': 'foo'}
