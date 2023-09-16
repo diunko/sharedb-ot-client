@@ -23,6 +23,7 @@ async def test_doc_create():
 
     await conn.connect()
 
+    # TODO: what if doc is already there?
     doc = await conn.create_doc(
         doc_id='testing', coll_id='collection-bla',
         data={
@@ -35,9 +36,16 @@ async def test_doc_create():
     print(doc)
 
     doc.apply([Op(p=['qux'], oi='bla2')])
+    doc.apply([Op(p=['qux'], oi='bla3')])
+    doc.apply([Op(p=['qux'], oi='bla4')])
 
     ack_msg = await doc._send_one_op_and_wait_ack()
+    print('got ack', ack_msg)
 
+    ack_msg = await doc._send_one_op_and_wait_ack()
+    print('got ack', ack_msg)
+
+    ack_msg = await doc._send_one_op_and_wait_ack()
     print('got ack', ack_msg)
 
     await conn._conn.close()

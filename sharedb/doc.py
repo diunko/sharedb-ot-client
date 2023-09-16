@@ -192,6 +192,8 @@ class Doc:
         assert self.v == v
         assert op_id == op.op_id
 
+        self.v += 1
+
         self._inflight_op = None
 
     async def _send_one_op_and_wait_ack(self):
@@ -207,6 +209,8 @@ class Doc:
         await self._conn._send_dict(msg)
 
         ack_msg = await self._conn.recv()
+        self._ack(doc_op.op_id, ack_msg['v'])
+
         return ack_msg
 
     def _push_op(self, ops: list[Op]):
