@@ -5,6 +5,7 @@ import random
 
 from delta import Delta
 from sharedb.json0 import Json0, Op
+from sharedb import client_v1
 
 Path = list[Union[str, int]]
 
@@ -105,6 +106,11 @@ class Doc:
 
     pending_ops: list[list[Op]] = field(default_factory=list)
     _inflight_op: DocOp = None
+    _conn: 'client_v1.Connection' = None
+
+    @property
+    def full_id(self) -> str:
+        return f'{self.coll_id}:{self.id}'
 
     @classmethod
     def create_(cls, data: dict, id='doc-id', coll_id='coll-id'):
