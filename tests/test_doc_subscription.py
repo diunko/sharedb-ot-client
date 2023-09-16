@@ -45,3 +45,32 @@ async def test_doc_subscription_basic():
         assert d['items', 0, 'selected'] == False
 
     await asyncio.gather(subscribe(), receive_ops())
+
+
+@pytest.mark.skip
+def test_update():
+    d = Doc.create({
+        'profile': {
+            'ava': 'blabla.jpg',
+            'nickname': 'ququ',
+        },
+        'items': [
+            {'id': 123,
+             'selected': True,
+             'content': 'oijaoijfdoiajdf'},
+            {'id': 123,
+             'selected': True,
+             'content': 'oijaoijfdoiajdf'},
+            {'id': 123,
+             'selected': True,
+             'content': 'oijaoijfdoiajdf'},
+            {'id': 123,
+             'selected': True,
+             'content': 'oijaoijfdoiajdf'},
+        ]
+    })
+
+    d.items[2].selected = False
+
+    d.profile.ava = 'ququ.jpg'
+    d._push_op([Op(p=['profile', 'ava'], oi='ququ.jpg')])
