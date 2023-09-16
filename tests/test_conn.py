@@ -8,7 +8,7 @@ logging.basicConfig(level=logging.DEBUG,
                     force=True)
 
 from sharedb.client_v1 import Connection
-from sharedb.doc import Doc
+from sharedb.doc import Doc, Op
 
 log = logging.getLogger('test_conn')
 
@@ -33,5 +33,11 @@ async def test_doc_create():
 
     print('doc')
     print(doc)
+
+    doc.apply([Op(p=['qux'], oi='bla2')])
+
+    ack_msg = await doc._send_one_op_and_wait_ack()
+
+    print('got ack', ack_msg)
 
     await conn._conn.close()

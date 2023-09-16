@@ -1,3 +1,4 @@
+import dataclasses
 from dataclasses import dataclass, field, replace as clone_op
 from typing import Optional, Any
 
@@ -25,6 +26,13 @@ class Op:
         if 0 < len(extra):
             log.warning(f"extra fields {extra} in decoded Op {d}")
         return Op(**{k: d[k] for k in kk})
+
+    def to_dict(self):
+        d = dataclasses.asdict(self)
+        return {
+            k: v
+            for k, v in d.items()
+            if k in self._fields and v is not None}
 
     def __repr__(self):
         return f"Op({' '.join(f'{k}={getattr(self, k)}' for k in self._fields if getattr(self, k) is not None)})"

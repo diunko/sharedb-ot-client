@@ -1,4 +1,5 @@
 import asyncio
+import dataclasses
 from dataclasses import dataclass, field
 from typing import Optional, Any, Union, Tuple
 import random
@@ -90,6 +91,9 @@ class DocOp:
     seq: int = 0
     c: str = 'c_default'  # collection
     d: str = 'd_default'  # document id
+
+    def to_dict(self):
+        return dataclasses.asdict(self)
 
 
 @dataclass
@@ -189,6 +193,21 @@ class Doc:
         assert op_id == op.op_id
 
         self._inflight_op = None
+
+    async def _send_one_op_and_wait_ack(self):
+        assert 0 < len(self.pending_ops)
+        doc_op = self._shift_op()
+        msg = {
+            'a': 'op', 'd': self.id, 'c': self.coll_id,
+            'v': self.v,
+            'seq': self._conn._next_seq(),
+            'x': {},
+            'op': [o.to_dict() for o in doc_op.op]
+        }
+        await self._conn._send_dict(msg)
+
+        ack_msg = await self._conn.recv()
+        return ack_msg
 
     def _push_op(self, ops: list[Op]):
         # rebase op by the ops waiting to be sent in buffer
