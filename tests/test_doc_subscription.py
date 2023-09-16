@@ -7,7 +7,7 @@ from sharedb.doc import Doc, Op
 
 @pytest.mark.asyncio
 async def test_doc_subscription_basic():
-    d = Doc.create({
+    d = Doc.create_({
         'items': [
             {'selected': True,
              'bullets': ['one', 'two', 'three'],
@@ -49,7 +49,7 @@ async def test_doc_subscription_basic():
 
 @pytest.mark.skip
 def test_update():
-    d = Doc.create({
+    d = Doc.create_({
         'profile': {
             'ava': 'blabla.jpg',
             'nickname': 'ququ',

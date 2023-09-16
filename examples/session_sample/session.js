@@ -146,7 +146,9 @@ class SandboxAPI {
                     })
             })
             chat.subscribe((err) => {
-                if (err) throw err;
+                if (err) {
+                    throw err
+                }
                 chat.on('op', (op, source) => {
                     console.log('chat.on.op(op,source)', op, source)
                 })
@@ -166,34 +168,62 @@ class TestClient {
 
         this.main = this.sharedb.get('examples', 'main')
         this.chat = this.sharedb.get('examples', 'chat')
+        this.testCreate = this.sharedb.get('examples', 'testCreate')
     }
 
     subscribeThings() {
         let self = this
-        this.main.subscribe(function (err) {
-            self.main.on('op', function (op, source) {
-                console.log('client.main.on.op(op,source)', op, source)
-            });
-        });
+        // this.main.subscribe(function (err) {
+        //     self.main.on('op', function (op, source) {
+        //         console.log('client.main.on.op(op,source)', op, source)
+        //     });
+        // });
+        //
+        // this.chat.subscribe(function (err) {
+        //     if (err) throw err;
+        //     self.chat.on('op', function (op, source) {
+        //         console.log("client.chat.on.op", op, source)
+        //     })
+        // });
 
-        this.chat.subscribe(function (err) {
-            if (err) throw err;
-            self.chat.on('op', function (op, source) {
-                console.log("client.chat.on.op", op, source)
+        this.testCreate.create({
+                'bla': 'qux',
+                'smth': 'foo'
+            }, 'json0',
+            () => {
+                console.log('created')
+                console.log('arguments', arguments)
+                console.log('doc after create acked', this.docRepr(this.testCreate))
             })
-        });
 
+        console.log('doc after create invoked', this.docRepr(this.testCreate))
+
+    }
+
+    docRepr(doc) {
+        return {
+            id: `${doc.collection}:${doc.id}`,
+            version: doc.version,
+            data: doc.data
+        }
     }
 
     async run() {
         this.subscribeThings()
+
         console.log('sleeping')
         await sleep(1000)
         console.log('trying to submit an op')
         // this.main.submitOp([{'insert': 'testing'}])
-        this.chat.submitOp([{p: ['testing'], oi: 123123}])
+        // this.chat.submitOp([{p: ['testing'], oi: 123123}])
+        this.testCreate.submitOp([{p: ['testing'], oi: 123123}])
         while (true) {
-            this.chat.submitOp([{p: ['testing'], na: 1}])
+            console.log('doc before submit op', this.docRepr(this.testCreate))
+            this.testCreate.submitOp([{p: ['testing'], na: 1}], (err) => {
+                console.log('op ack error', err)
+                console.log('after op acked', this.docRepr(this.testCreate))
+            })
+            console.log('doc after submit', this.docRepr(this.testCreate))
             await sleep(5000)
         }
     }

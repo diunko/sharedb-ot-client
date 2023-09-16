@@ -3,7 +3,7 @@ from sharedb.doc import Doc, Op
 
 # noinspection PyUnresolvedReferences
 def test_doc_subscription_basic():
-    d = Doc.create({
+    d = Doc.create_({
         'items': [
             {'selected': True,
              'bullets': ['one', 'two', 'three'],

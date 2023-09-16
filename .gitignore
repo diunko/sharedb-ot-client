@@ -111,4 +111,4 @@ ENV/
 .idea
 .terraform.lock.hcl
 *~undo-tree~
-
+node_modules

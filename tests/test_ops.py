@@ -4,10 +4,8 @@ from sharedb.doc import Doc, Op, DocOp
 
 def test_ops_basic():
     print('====' * 8)
-    o1 = DocOp(v=4, seq=10, c='oijo', d='werwer',
-               op=[Op(p=['a', 'b', 'c'], oi='oaidsjf')])
 
-    d = Doc.create({
+    d = Doc.create_({
         'profile': {
             'ava': 'bla.jpg',
             'nickname': 'test'},

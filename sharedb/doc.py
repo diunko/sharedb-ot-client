@@ -100,15 +100,15 @@ class Doc:
     seq: int = 0
 
     v: int = 0
-    data: dict = field(default_factory=dict)
+    data: dict = None
     subscriptions: list = field(default_factory=list)
 
     pending_ops: list[list[Op]] = field(default_factory=list)
     _inflight_op: DocOp = None
 
     @classmethod
-    def create(cls, d: dict, id='doc-id', coll_id='coll-id'):
-        doc = Doc(data=d, id=id, coll_id=coll_id, v=1)
+    def create_(cls, data: dict, id='doc-id', coll_id='coll-id'):
+        doc = Doc(data=data, id=id, coll_id=coll_id, v=0)
         return doc
 
     def __getitem__(self, k):
@@ -128,6 +128,34 @@ class Doc:
         else:
             assert False, "bad type match"
         return _set_in(self.data, path, v)
+
+    async def create(self, data: dict):
+        assert self.v == 0
+        assert self.data is None
+
+        self.data = data
+        seq, op_id = self._next_seq()
+        create_op = {
+            'd': self.id,
+            'c': self.coll_id,
+            'op_id': op_id,
+            'seq': seq,
+            # 'x': {},
+            'v': None,
+            'create': {
+                'type': 'json0',
+                'data': self.data
+            }
+        }
+        self._conn.send(create_op)
+        m = await self._conn.cond_recv(matcher=lambda m: (
+                m['src'] == self.cli_id
+                and m['seq'] == seq
+                and m['d'] == self.id
+                and m['c'] == self.coll_id))
+
+        assert m['v'] == 0
+        self.v += 1
 
     def apply(self, ops: list[Op]):
         Json0.apply(self.data, ops)
