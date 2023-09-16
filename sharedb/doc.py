@@ -1,6 +1,7 @@
 import asyncio
 from dataclasses import dataclass, field
 from typing import Optional, Any, Union, Tuple
+import random
 
 from delta import Delta
 from sharedb.json0 import Json0, Op
@@ -80,14 +81,34 @@ class OpSubscription:
 
 
 @dataclass
+class DocOp:
+    v: int
+    op: list[Op]
+
+    op_id: str = 'unk-op-id'
+    seq: int = 0
+    c: str = 'c_default'  # collection
+    d: str = 'd_default'  # document id
+
+
+@dataclass
 class Doc:
+    id: str = 'doc-id'
+    coll_id: str = 'coll-id'
+
+    cli_id: str = field(default_factory=lambda: str(random.randint(10 ** 6, 2 * 10 ** 6)))
+    seq: int = 0
+
+    v: int = 0
     data: dict = field(default_factory=dict)
-    ops: list[Op] = field(default_factory=list)
     subscriptions: list = field(default_factory=list)
 
+    pending_ops: list[list[Op]] = field(default_factory=list)
+    _inflight_op: DocOp = None
+
     @classmethod
-    def create(cls, d: dict):
-        doc = Doc(data=d)
+    def create(cls, d: dict, id='doc-id', coll_id='coll-id'):
+        doc = Doc(data=d, id=id, coll_id=coll_id, v=1)
         return doc
 
     def __getitem__(self, k):
@@ -107,6 +128,33 @@ class Doc:
         else:
             assert False, "bad type match"
         return _set_in(self.data, path, v)
+
+    def apply(self, ops: list[Op]):
+        Json0.apply(self.data, ops)
+        self.pending_ops.append(ops)
+
+    def _next_seq(self):
+        seq = self.seq
+        op_id = f'{self.cli_id}-{str(seq)}'
+        self.seq += 1
+        return seq, op_id
+
+    def _shift_op(self) -> DocOp:
+        assert self._inflight_op is None
+        assert 0 < len(self.pending_ops)
+        ops0 = self.pending_ops.pop(0)
+        seq, op_id = self._next_seq()
+        d_o = DocOp(v=self.v, op=ops0, seq=seq, op_id=op_id,
+                    d=self.id, c=self.coll_id)
+        self._inflight_op = d_o
+        return d_o
+
+    def _ack(self, op_id, v):
+        assert (op := self._inflight_op) is not None
+        assert self.v == v
+        assert op_id == op.op_id
+
+        self._inflight_op = None
 
     def _push_op(self, ops: list[Op]):
         # rebase op by the ops waiting to be sent in buffer
