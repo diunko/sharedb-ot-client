@@ -196,7 +196,7 @@ class Doc:
 
         self._inflight_op = None
 
-    async def _send_one_op_and_wait_ack(self):
+    async def _test_send_one_op_and_wait_ack(self):
         assert 0 < len(self.pending_ops)
         doc_op = self._shift_op()
         msg = {

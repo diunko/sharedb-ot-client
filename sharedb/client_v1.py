@@ -27,6 +27,7 @@ class Connection:
         self.log = logging.getLogger(self.__class__.__name__)
 
     async def connect(self):
+        assert self._conn is None
         self._conn = await websockets.connect(self.url, user_agent_header='sharedb-py')
         await self._send_dict({'a': 'hs', 'id': None})  # handshake
         m1 = await self.recv()
@@ -104,7 +105,40 @@ class Connection:
         d.v = msg_ack['v'] + 1
         return d
 
+    async def fetch_doc(self, doc_id, coll_id):
+        msg = {
+            'a': 'bs',
+            'c': coll_id,
+            'b': [doc_id]
+        }
+        await self._send_dict(msg)
+
+        msg_sub = await self.recv()
+        # assert msg_sub == {
+        #     'a': 'bs', 'c': 'examples',
+        #     'data': {
+        #         'testCreate': {
+        #             'v': 397,
+        #             'data': {'bla': 'qux', 'smth': 'foo', 'testing': 123520}}}}
+        assert msg_sub['a'] == 'bs'
+        assert msg_sub['c'] == coll_id
+        assert doc_id in msg_sub['data']
+
+        doc_msg = msg_sub['data'][doc_id]
+        d = doc.Doc(
+            id=doc_id, coll_id=coll_id, v=doc_msg['v'],
+            data=doc_msg['data'],
+            _conn=self,
+        )
+        self.docs[d.full_id] = d
+        return d
+
     def _next_seq(self):
         seq = self.seq
         self.seq += 1
         return seq
+
+    async def close(self):
+        assert self._conn is not None
+        await self._conn.close()
+        self._conn = None
