@@ -16,6 +16,7 @@ def test_ops_basic():
         id='doc-foo',
         coll_id='coll-bar'
     )
+    d.v = 1  # as if it was acked by server
 
     op = Op(p=['profile', 'nickname'], oi='qux')
     d.apply([op])
