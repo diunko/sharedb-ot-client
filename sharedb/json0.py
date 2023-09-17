@@ -39,12 +39,16 @@ class Op:
 
     @property
     def li_(self): return self.li is not None
+
     @property
     def ld_(self): return self.ld is not None
+
     @property
     def oi_(self): return self.oi is not None
+
     @property
     def od_(self): return self.od is not None
+
 
 class Json0:
 
@@ -79,7 +83,11 @@ class Json0:
             if op.oi_:
                 ref[key] = op.oi
             elif op.od_:
-                del ref[key]
+                if key in ref:
+                    del ref[key]
+                else:
+                    log.warning('deleting non-existing key! (data=%s), (path=%s), (key=%s)',
+                                data, path, key)
             else:
                 assert False, f"shouldn't reach here, op: {op}"
             return

@@ -217,6 +217,30 @@ class Doc:
 
         return ack_msg
 
+    async def _test_subscribe(self):
+        msg = {
+            'a': 'bs',
+            'c': self.coll_id,
+            'b': [self.id]
+        }
+        await self._conn._send_dict(msg)
+        msg = await self._conn.recv()
+        print('got subscription result msg', msg)
+        assert msg['a'] == 'bs'
+        assert msg['c'] == self.coll_id
+        assert self.id in msg['data']
+        assert self.v == msg['data'][self.id]['v']
+
+    async def _test_recv_one_op(self):
+        msg = await self._conn.recv()
+        assert msg['a'] == 'op'
+        assert msg['src'] != self._conn.id
+
+        print('got op msg from other src', msg)
+        doc_op = DocOp(d=msg['d'], c=msg['c'], v=msg['v'], src=msg['src'],
+                       op=[Op(**o) for o in msg['op']])
+        return self._push_op(doc_op)
+
     async def _test_send_one_op_wait_ops_and_ack(self):
         assert 0 < len(self.pending_ops)
         doc_op = self._shift_op()
@@ -247,29 +271,36 @@ class Doc:
 
     def _push_op(self, doc_op: DocOp):
         assert doc_op.v == self.v
-        # TODO: transform all pending ops using transform(pending_op, doc_op, 'L')
-        #     transform server op using transform(doc_op, pending_op, 'R')
+        # transform all pending ops using transform(pending_op, doc_op, 'L')
+        # transform server op using transform(doc_op, pending_op, 'R')
 
-        # rebase op and buffer ops
-        assert self._inflight_op is not None and 0 == len(self.pending_ops), "only in-flight mode for now"
+        # rebase in-fight op and buffer ops
+        # TODO: extend this to buffer ops as well
+        assert 0 == len(self.pending_ops), "only in-flight mode for now"
 
         op_A = doc_op
-        op_B = self._inflight_op
+        if self._inflight_op is not None:
+            op_B = self._inflight_op
 
-        ops_A1 = Json0.transform(op_A.op, op_B.op, 'right')
-        ops_B1 = Json0.transform(op_B.op, op_A.op, 'left')
+            ops_A1 = Json0.transform(op_A.op, op_B.op, 'right')
+            ops_B1 = Json0.transform(op_B.op, op_A.op, 'left')
 
-        # TODO: XXX inplace!
-        op_B.op = ops_B1
-        op_B.v = op_A.v + 1
+            # TODO: XXX inplace!
+            op_B.op = ops_B1
+            op_B.v = op_A.v + 1
+
+            op_A.op = ops_A1
+            # op_A.v += 1
 
         # apply rebased op
-        Json0.apply(self.data, ops_A1)
+        Json0.apply(self.data, op_A.op)
         self.v = op_A.v + 1
 
-        for op in ops_A1:
+        for op in op_A.op:
             for sub in self.subscriptions:
                 sub(op)
+
+        return op_A
 
     def on(self):
         return OpSubscription(self)

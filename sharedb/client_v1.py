@@ -103,6 +103,9 @@ class Connection:
         assert msg_ack['a'] == 'op'
 
         d.v = msg_ack['v'] + 1
+
+        await d._test_subscribe()
+
         return d
 
     async def fetch_doc(self, doc_id, coll_id):

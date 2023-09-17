@@ -116,10 +116,21 @@ async def connect_and_fetch_doc(doc_id, coll_id) -> Doc:
 
 
 @pytest.mark.asyncio
-async def test_doc_transform_ops():
+async def test_doc_create():
     d1 = await connect_and_create_test_doc({
         'bla': 'qux',
         'test': 'foo'
+    })
+    print('d1', d1)
+
+    await d1._conn.close()
+
+
+@pytest.mark.asyncio
+async def test_doc_transform_ops():
+    d1 = await connect_and_create_test_doc({
+        'bla': 'qux',
+        'qux': 'bla1'
     })
     d1.apply([Op(p=['qux'], oi='bla2')])
     d1.apply([Op(p=['qux'], oi='bla3')])
@@ -147,6 +158,11 @@ async def test_doc_transform_ops():
     d2.apply([Op(p=['qux'], oi='bla5')])
     a1 = await d2._test_send_one_op_wait_ops_and_ack()
 
+    print('d2 op sent')
+
+    o_d1_2 = await d1._test_recv_one_op()
+
+    print('o_d1_2', o_d1_2)
     print('d1', d1)
     print('d2', d2)
 
