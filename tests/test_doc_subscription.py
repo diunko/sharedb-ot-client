@@ -40,7 +40,7 @@ async def test_doc_subscription_basic():
         await asyncio.sleep(0.1)
         for ch in changes:
             i, v = ch
-            d._push_op([Op(**{'p': ['items', i, 'selected'], 'oi': v})])
+            d._push_op(d.Op([Op(**{'p': ['items', i, 'selected'], 'oi': v})]))
 
         assert d['items', 0, 'selected'] == False
 
@@ -73,4 +73,4 @@ def test_update():
     d.items[2].selected = False
 
     d.profile.ava = 'ququ.jpg'
-    d._push_op([Op(p=['profile', 'ava'], oi='ququ.jpg')])
+    d._push_op(d.Op([Op(p=['profile', 'ava'], oi='ququ.jpg')]))

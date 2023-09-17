@@ -91,6 +91,7 @@ class DocOp:
     seq: int = 0
     c: str = 'c_default'  # collection
     d: str = 'd_default'  # document id
+    src: str = 'unk-src-id'
 
     def to_dict(self):
         return dataclasses.asdict(self)
@@ -120,6 +121,9 @@ class Doc:
     def create_(cls, data: dict, id='doc-id', coll_id='coll-id'):
         doc = Doc(data=data, id=id, coll_id=coll_id, v=0)
         return doc
+
+    def __repr__(self):
+        return f'Doc(id={self.id}, coll_id={self.coll_id}, v={self.v}, data={self.data}, _inflight_op={self._inflight_op})'
 
     def __getitem__(self, k):
         if isinstance(k, (list, tuple)):
@@ -213,18 +217,70 @@ class Doc:
 
         return ack_msg
 
-    def _push_op(self, ops: list[Op]):
-        # rebase op by the ops waiting to be sent in buffer
+    async def _test_send_one_op_wait_ops_and_ack(self):
+        assert 0 < len(self.pending_ops)
+        doc_op = self._shift_op()
+        msg = {
+            'a': 'op', 'd': self.id, 'c': self.coll_id,
+            'v': self.v,
+            'seq': self._conn._next_seq(),
+            'x': {},
+            'op': [o.to_dict() for o in doc_op.op]
+        }
+        await self._conn._send_dict(msg)
+
+        while (msg := await self._conn.recv()) and msg['src'] != self._conn.id:
+            print('got msg from other src', msg)
+            doc_op_other = DocOp(d=msg['d'], c=msg['c'], v=msg['v'], src=msg['src'],
+                                 op=[Op(**o) for o in msg['op']])
+            self._push_op(doc_op_other)
+
+        ack_msg = msg
+        # assert ack_msg['op']
+        print('got ack', ack_msg)
+        self._ack(doc_op.op_id, ack_msg['v'])
+
+        return ack_msg
+
+    def _push_op1(self, ops: list[Op]):
+        pass
+
+    def _push_op(self, doc_op: DocOp):
+        assert doc_op.v == self.v
+        # TODO: transform all pending ops using transform(pending_op, doc_op, 'L')
+        #     transform server op using transform(doc_op, pending_op, 'R')
+
+        # rebase op and buffer ops
+        assert self._inflight_op is not None and 0 == len(self.pending_ops), "only in-flight mode for now"
+
+        op_A = doc_op
+        op_B = self._inflight_op
+
+        ops_A1 = Json0.transform(op_A.op, op_B.op, 'right')
+        ops_B1 = Json0.transform(op_B.op, op_A.op, 'left')
+
+        # TODO: XXX inplace!
+        op_B.op = ops_B1
+        op_B.v = op_A.v + 1
 
         # apply rebased op
-        Json0.apply(self.data, ops)
+        Json0.apply(self.data, ops_A1)
+        self.v = op_A.v + 1
 
-        for op in ops:
+        for op in ops_A1:
             for sub in self.subscriptions:
                 sub(op)
 
     def on(self):
         return OpSubscription(self)
+
+    def Op(self, op: list[Op]):
+        return DocOp(
+            d=self.id,
+            c=self.coll_id,
+            v=self.v,
+            op=op,
+        )
 
 
 def _set_in(ref: dict, path: Path, v: Any):

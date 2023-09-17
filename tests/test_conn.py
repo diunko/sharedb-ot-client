@@ -104,3 +104,52 @@ async def test_doc_fetch():
     print('got ack', ack_msg)
 
     await conn.close()
+
+
+async def connect_and_fetch_doc(doc_id, coll_id) -> Doc:
+    url = 'ws://localhost:17171'
+    conn = Connection(url)
+    await conn.connect()
+
+    doc = await conn.fetch_doc(doc_id, coll_id)
+    return doc
+
+
+@pytest.mark.asyncio
+async def test_doc_transform_ops():
+    d1 = await connect_and_create_test_doc({
+        'bla': 'qux',
+        'test': 'foo'
+    })
+    d1.apply([Op(p=['qux'], oi='bla2')])
+    d1.apply([Op(p=['qux'], oi='bla3')])
+    d1.apply([Op(p=['qux'], oi='bla4')])
+
+    d2 = await connect_and_fetch_doc(d1.id, d1.coll_id)
+
+    a1 = await d1._test_send_one_op_and_wait_ack()
+    print('got ack', a1)
+    a1 = await d1._test_send_one_op_and_wait_ack()
+    print('got ack', a1)
+    a1 = await d1._test_send_one_op_and_wait_ack()
+    print('got ack', a1)
+
+    o2 = await d2._conn.recv()
+    assert o2['a'] == 'op'
+    print('got op on d2')
+    o2 = await d2._conn.recv()
+    assert o2['a'] == 'op'
+    print('got op on d2')
+    o2 = await d2._conn.recv()
+    assert o2['a'] == 'op'
+    print('got op on d2')
+
+    d2.apply([Op(p=['qux'], oi='bla5')])
+    a1 = await d2._test_send_one_op_wait_ops_and_ack()
+
+    print('d1', d1)
+    print('d2', d2)
+
+    await asyncio.gather(
+        d1._conn.close(),
+        d2._conn.close())
