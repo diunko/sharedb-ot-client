@@ -169,3 +169,32 @@ async def test_doc_transform_ops():
     await asyncio.gather(
         d1._conn.close(),
         d2._conn.close())
+
+
+@pytest.mark.asyncio
+async def test_doc_transform_ops():
+    d1 = await connect_and_create_test_doc({
+        'bla': 'qux',
+        'qux': 'bla1'
+    })
+    d1.apply([Op(p=['qux'], oi='bla2')])
+    d1.apply([Op(p=['qux'], oi='bla3')])
+    d1.apply([Op(p=['qux'], oi='bla4')])
+
+    d2 = await connect_and_fetch_doc(d1.id, d1.coll_id)
+
+    a1 = await d1._test_send_one_op_and_wait_ack()
+    print('got ack', a1)
+    a1 = await d1._test_send_one_op_and_wait_ack()
+    print('got ack', a1)
+    a1 = await d1._test_send_one_op_and_wait_ack()
+    print('got ack', a1)
+
+    # connection handles incoming ops for d2
+    await asyncio.sleep(2)
+
+    assert d2.data == {'bla': 'qux', 'qux': 'bla4'}
+
+    await asyncio.gather(
+        d1._conn.close(),
+        d2._conn.close())
