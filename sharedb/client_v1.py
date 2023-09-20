@@ -77,7 +77,7 @@ class Connection:
             self.log.warning('<Session %s> recv exception %s', self, e)
             raise
 
-    async def create_doc(self, doc_id, coll_id, data: dict) -> doc.Doc:
+    async def create_doc(self, doc_id, coll_id, data: dict) -> 'doc.Doc':
         # send create
         d = doc.Doc.create_(data=data, id=doc_id, coll_id=coll_id)
         d._conn = self
