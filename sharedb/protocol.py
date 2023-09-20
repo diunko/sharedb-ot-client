@@ -19,6 +19,10 @@ class Protocol:
         }
         return CLS(**d1)
 
+    @staticmethod
+    def encode_dict(m):
+        return {k: v for k, v in dataclasses.asdict(m).items() if v is not None}
+
     @classmethod
     def register_message(registry_cls, message_cls):
         action = getattr(message_cls, "a")
@@ -86,7 +90,7 @@ class BulkSub:
     # server replies with dict[doc_id: Snapshot]
     data: Optional[dict[str, Snapshot]] = None
 
-    a = 'bs'
+    a: str = 'bs'
 
 
 def test_protocol_basic():
@@ -111,3 +115,7 @@ def test_protocol_basic():
     })
 
     print('op, ack', m1, m1.is_ack)
+
+    m = BulkSub(c='coll-id', b=['doc-id-1', 'doc-id-2'])
+    print('bulksub', m)
+    print('encoded', Protocol.encode_dict(m))
