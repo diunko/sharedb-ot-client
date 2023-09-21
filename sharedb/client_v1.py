@@ -1,4 +1,4 @@
-from asyncio import Future
+from asyncio import Future, create_task
 from dataclasses import dataclass, field
 from typing import Callable
 from collections import defaultdict
@@ -26,6 +26,8 @@ class Connection:
     _conn: WebSocketClientProtocol = None
     _matchers: dict[Callable[[Msg], bool], Future] = field(default_factory=dict)
     _stop = False
+    _main_ops_loop_coro = None
+    _main_ops_loop_task = None
 
     def __post_init__(self):
         self.log = logging.getLogger(self.__class__.__name__)
@@ -51,15 +53,23 @@ class Connection:
         assert m2['protocolMinor'] == 1
         self.id = m2['id']
 
+    def start_updates(self):
+        assert self._main_ops_loop_coro is None
+        self._main_ops_loop_coro = self.main_ops_loop()
+        self._main_ops_loop_task = create_task(self._main_ops_loop_coro)
+
     async def main_ops_loop(self):
-        while not self._stop:
-            m: proto.Op = await self.recv()
-            assert m.a == 'op', f'expecting only an Op msg, got: {m}'
-            d = self.collections[m.c][m.d]
-            if m.is_ack:
-                d._ack_msg(m)
-            else:
-                d._push_op_msg(m)
+        try:
+            while not self._stop:
+                m: proto.Op = await self.recv()
+                assert m.a == 'op', f'expecting only an Op msg, got: {m}'
+                d = self.collections[m.c][m.d]
+                if m.is_ack:
+                    d._ack_msg(m)
+                else:
+                    d._push_op_msg(m)
+        except websockets.exceptions.ConnectionClosedOK:
+            self._stop = True
 
     async def _send(self, m):
         d = proto.Protocol.encode_dict(m)
@@ -184,6 +194,9 @@ class Connection:
         assert self._conn is not None
         await self._conn.close()
         self._stop = True
+        if self._main_ops_loop_task is not None:
+            await self._main_ops_loop_task
+            self._main_ops_loop_task = None
         self._conn = None
 
 

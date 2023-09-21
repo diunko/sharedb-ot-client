@@ -171,7 +171,6 @@ async def test_doc_transform_ops():
         d2._conn.close())
 
 
-@pytest.mark.xfail
 @pytest.mark.asyncio
 async def test_conn_two_docs_sync():
     d1 = await connect_and_create_test_doc({
@@ -183,6 +182,7 @@ async def test_conn_two_docs_sync():
     d1.apply([Op(p=['qux'], oi='bla4')])
 
     d2 = await connect_and_fetch_doc(d1.id, d1.coll_id)
+    d2._conn.start_updates()
 
     try:
         a1 = await d1._test_send_one_op_and_wait_ack()
@@ -193,8 +193,9 @@ async def test_conn_two_docs_sync():
         print('got ack', a1)
 
         # connection handles incoming ops for d2
-        await asyncio.sleep(2)
+        await asyncio.sleep(0.5)
 
+        print('doc d2 after waiting\n\t', d2)
         assert d2.data == {'bla': 'qux', 'qux': 'bla4'}
 
     finally:
