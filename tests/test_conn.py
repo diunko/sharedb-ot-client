@@ -145,13 +145,13 @@ async def test_doc_transform_ops():
     a1 = await d1._test_send_one_op_and_wait_ack()
     print('got ack', a1)
 
-    o2 = await d2._conn.recv()
+    o2 = await d2._conn.recv_dict()
     assert o2['a'] == 'op'
     print('got op on d2')
-    o2 = await d2._conn.recv()
+    o2 = await d2._conn.recv_dict()
     assert o2['a'] == 'op'
     print('got op on d2')
-    o2 = await d2._conn.recv()
+    o2 = await d2._conn.recv_dict()
     assert o2['a'] == 'op'
     print('got op on d2')
 

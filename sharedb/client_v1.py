@@ -31,14 +31,14 @@ class Connection:
         assert self._conn is None
         self._conn = await websockets.connect(self.url, user_agent_header='sharedb-py')
         await self._send_dict({'a': 'hs', 'id': None})  # handshake
-        m1 = await self.recv()
+        m1 = await self.recv_dict()
         assert m1['a'] == 'init'
         # assert m1 == {
         #     "a": "init", "protocol": 1, "protocolMinor": 1,
         #     "id": "54023855a811cde2927615ef6065cc87",
         #     "type": "http://sharejs.org/types/JSONv0"}
 
-        m2 = await self.recv()
+        m2 = await self.recv_dict()
         # assert m2 == {
         #     'a': 'hs', 'protocol': 1, 'protocolMinor': 1,
         #     'id': '2937f521a52b4982d104e74823526d35',
@@ -63,7 +63,7 @@ class Connection:
         self._matchers[matcher] = f
         return f
 
-    async def recv(self):
+    async def recv_dict(self):
         try:
             msg_str = await self._conn.recv()
             # self.log.debug('client got raw message: %s', msg_str)
@@ -99,7 +99,7 @@ class Connection:
         }
         await self._send_dict(msg)
 
-        msg_ack = await self.recv()
+        msg_ack = await self.recv_dict()
         # assert msg_ack == {
         #     "src": "4e4713e6398b8e077a73f416673f7139", "seq": 1, "v": 0,
         #     "a": "op", "c": "examples", "d": "testCreate"}
@@ -121,7 +121,7 @@ class Connection:
         }
         await self._send_dict(msg)
 
-        msg_sub = await self.recv()
+        msg_sub = await self.recv_dict()
         # assert msg_sub == {
         #     'a': 'bs', 'c': 'examples',
         #     'data': {

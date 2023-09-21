@@ -212,7 +212,7 @@ class Doc:
         }
         await self._conn._send_dict(msg)
 
-        ack_msg = await self._conn.recv()
+        ack_msg = await self._conn.recv_dict()
         self._ack(doc_op.op_id, ack_msg['v'])
 
         return ack_msg
@@ -224,7 +224,7 @@ class Doc:
             'b': [self.id]
         }
         await self._conn._send_dict(msg)
-        msg = await self._conn.recv()
+        msg = await self._conn.recv_dict()
         print('got subscription result msg', msg)
         assert msg['a'] == 'bs'
         assert msg['c'] == self.coll_id
@@ -232,7 +232,7 @@ class Doc:
         assert self.v == msg['data'][self.id]['v']
 
     async def _test_recv_one_op(self):
-        msg = await self._conn.recv()
+        msg = await self._conn.recv_dict()
         assert msg['a'] == 'op'
         assert msg['src'] != self._conn.id
 
@@ -253,7 +253,7 @@ class Doc:
         }
         await self._conn._send_dict(msg)
 
-        while (msg := await self._conn.recv()) and msg['src'] != self._conn.id:
+        while (msg := await self._conn.recv_dict()) and msg['src'] != self._conn.id:
             print('got msg from other src', msg)
             doc_op_other = DocOp(d=msg['d'], c=msg['c'], v=msg['v'], src=msg['src'],
                                  op=[Op(**o) for o in msg['op']])
