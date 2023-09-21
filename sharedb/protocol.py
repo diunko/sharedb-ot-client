@@ -12,16 +12,22 @@ class Protocol:
     def decode_dict(cls, d: dict):
         action = d['a']
         CLS = cls.registry[action]
-        d1 = {
-            name: d[name] if name in d else f.default
-            for name, f in CLS.__dataclass_fields__.items()
-            if name in d or not isinstance(f.default, dataclasses._MISSING_TYPE)
-        }
-        return CLS(**d1)
+        if hasattr(CLS, 'from_dict'):
+            return CLS.from_dict(d)
+        else:
+            d1 = {
+                name: d[name] if name in d else f.default
+                for name, f in CLS.__dataclass_fields__.items()
+                if name in d or not isinstance(f.default, dataclasses._MISSING_TYPE)
+            }
+            return CLS(**d1)
 
     @staticmethod
     def encode_dict(m):
-        return {k: v for k, v in dataclasses.asdict(m).items() if v is not None}
+        if hasattr(m, 'to_dict'):
+            return m.to_dict()
+        else:
+            return {k: v for k, v in dataclasses.asdict(m).items() if v is not None}
 
     @classmethod
     def register_message(registry_cls, message_cls):
@@ -57,7 +63,7 @@ class Handshake:
     protocolMinor: int = 1
     type: Optional[str] = "http://sharejs.org/types/JSONv0"
 
-    a = 'hs'
+    a: str = 'hs'
 
 
 @Protocol.register_message
@@ -69,14 +75,29 @@ class Op:
     v: int
     seq: int
 
-    op: Optional[list['doc.Op']] = None
+    op: list['doc.Op'] = None
     create: Optional[Snapshot] = None
 
-    a = 'op'
+    a: str = 'op'
 
     @property
     def is_ack(self):
         return self.op is None and self.create is None
+
+    @classmethod
+    def from_dict(cls, d: dict):
+        d1 = {}
+        for name, f in cls.__dataclass_fields__.items():
+            if name in d or not isinstance(f.default, dataclasses._MISSING_TYPE):
+                d1[name] = d[name] if name in d else f.default
+        if 'op' in d:
+            d1['op'] = [doc.Op(**op) for op in d['op']]
+        return cls(**d1)
+
+    def to_dict(self):
+        d = {k: v for k, v in dataclasses.asdict(self).items() if v is not None}
+        d['op'] = [o.to_dict() for o in self.op]
+        return d
 
 
 @Protocol.register_message
@@ -85,7 +106,7 @@ class BulkSub:
     c: str  # collection
 
     # client subscribes with list of doc_id's
-    b: list[str]
+    b: Optional[list[str]] = None
 
     # server replies with dict[doc_id: Snapshot]
     data: Optional[dict[str, Snapshot]] = None
@@ -119,3 +140,34 @@ def test_protocol_basic():
     m = BulkSub(c='coll-id', b=['doc-id-1', 'doc-id-2'])
     print('bulksub', m)
     print('encoded', Protocol.encode_dict(m))
+
+
+def test_protocol_snapshot():
+    print('====')
+
+    m: BulkSub = Protocol.decode_dict({
+        'a': 'bs',
+        'c': 'collection-a',
+        'data': {
+            'document-b': {
+                'v': 14,
+                'data': {'foo': 'qux'}}}})
+
+    print('m1', m)
+
+    assert m.data['document-b'] == {'v': 14, 'data': {'foo': 'qux'}}
+
+
+def test_protocol_op_embedded():
+    print('====')
+    m: Op = Protocol.decode_dict({
+        'a': 'op',
+        'c': 'coll-a',
+        'd': 'doc-b',
+        'src': 'unk-src-id',
+        'v': 123,
+        'seq': 1234,
+        'op': [{'p': ['a', 'b'], 'oi': 1234}]
+    })
+
+    print('decoded', m)

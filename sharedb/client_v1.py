@@ -1,6 +1,7 @@
 from asyncio import Future
 from dataclasses import dataclass, field
 from typing import Callable
+from collections import defaultdict
 
 import json
 import websockets
@@ -8,6 +9,7 @@ from websockets.client import WebSocketClientProtocol
 import logging
 
 from sharedb import doc
+import sharedb.protocol as proto
 
 Msg = dict
 
@@ -19,6 +21,7 @@ class Connection:
     id: str = None
     seq: int = 0
     docs: dict[str, 'doc.Doc'] = field(default_factory=dict)
+    collections: dict[str, dict[str, 'doc.Doc']] = field(default_factory=lambda: defaultdict(dict))
 
     _conn: WebSocketClientProtocol = None
     _matchers: dict[Callable[[Msg], bool], Future] = field(default_factory=dict)
@@ -48,9 +51,19 @@ class Connection:
         assert m2['protocolMinor'] == 1
         self.id = m2['id']
 
-    # async def main_loop(self):
-    #     while not self._stop:
-    #         m = await self.recv()
+    async def main_ops_loop(self):
+        while not self._stop:
+            m: proto.Op = await self.recv()
+            assert m.a == 'op', f'expecting only an Op msg, got: {m}'
+            d = self.collections[m.c][m.d]
+            if m.is_ack:
+                d._ack_msg(m)
+            else:
+                d._push_op_msg(m)
+
+    async def _send(self, m):
+        d = proto.Protocol.encode_dict(m)
+        await self._send_dict(d)
 
     async def _send_dict(self, d: dict):
         data = json.dumps(d)
@@ -62,6 +75,25 @@ class Connection:
         f = Future()
         self._matchers[matcher] = f
         return f
+
+    async def recv(self):
+        try:
+            msg_str = await self._conn.recv()
+            # self.log.debug('client got raw message: %s', msg_str)
+            try:
+                m_dict = json.loads(msg_str)
+                m = proto.Protocol.decode_dict(m_dict)
+            except Exception:
+                self.log.exception('client message decode exception: <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n\t%s',
+                                   json.loads(msg_str))
+                raise
+
+            self.log.debug('client got %s message: <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n\t%s', m.a, m)
+            return m
+
+        except Exception as e:
+            self.log.warning('<Session %s> recv exception %s', self, e)
+            raise
 
     async def recv_dict(self):
         try:
@@ -88,6 +120,7 @@ class Connection:
         d._conn = self
 
         self.docs[d.full_id] = d
+        self.collections[d.coll_id][d.id] = d
 
         msg = {
             'a': 'op',
@@ -139,6 +172,7 @@ class Connection:
             _conn=self,
         )
         self.docs[d.full_id] = d
+        self.collections[d.coll_id][d.id] = d
         return d
 
     def _next_seq(self):
@@ -149,4 +183,12 @@ class Connection:
     async def close(self):
         assert self._conn is not None
         await self._conn.close()
+        self._stop = True
         self._conn = None
+
+
+def test_conn_collections_init():
+    c = Connection('testurl')
+    c.collections['coll-a']['bla'] = doc.Doc(id='testingdoc')
+
+    print(c.collections)
