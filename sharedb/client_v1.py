@@ -22,6 +22,7 @@ class Connection:
 
     _conn: WebSocketClientProtocol = None
     _matchers: dict[Callable[[Msg], bool], Future] = field(default_factory=dict)
+    _stop = False
 
     def __post_init__(self):
         self.log = logging.getLogger(self.__class__.__name__)
@@ -46,6 +47,10 @@ class Connection:
         assert m2['protocol'] == 1
         assert m2['protocolMinor'] == 1
         self.id = m2['id']
+
+    # async def main_loop(self):
+    #     while not self._stop:
+    #         m = await self.recv()
 
     async def _send_dict(self, d: dict):
         data = json.dumps(d)
