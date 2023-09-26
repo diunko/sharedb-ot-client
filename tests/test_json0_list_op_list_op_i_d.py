@@ -107,13 +107,12 @@ def test_json0_list_op__same_list__delete_insert_0():
     assert o_n1_r == [Op(p=['a', 'b', 2], li=22)]
 
 
-@pytest.mark.xfail
 def test_json0_list_op__same_list__delete_insert_1():
     print('====')
     d0 = {'a': {'b': [10, 11, 12, 13, 14]}}
 
     ################
-    # new op inserts at the same place as applied
+    # new op inserts at the same place as deleted
     o_a = [Op(p=['a', 'b', 3], ld=13)]
     o_n = [Op(p=['a', 'b', 3], li=23)]
 

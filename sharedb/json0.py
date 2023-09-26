@@ -305,9 +305,15 @@ class Json0:
                 d.append(cn1)
                 return d
             if i_n == i_a:
-                # the element that cn wants to operate on was deleted
-                # discard cn
-                return d
+                if la == lc == ln and cn.li_:
+                    # cn inserts element at the same index that was deleted
+                    # no change in cn
+                    d.append(cn1)
+                    return d
+                else:
+                    # the element that cn wants to operate on was deleted
+                    # discard cn
+                    return d
             if i_a < i_n:
                 cn1.p[la - 1] -= 1
                 d.append(cn1)
