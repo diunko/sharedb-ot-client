@@ -1,5 +1,6 @@
 import dataclasses
-from dataclasses import dataclass, field, replace as clone_op
+from dataclasses import dataclass, field
+from copy import deepcopy as clone_op
 from typing import Optional, Any
 
 import logging
@@ -145,7 +146,7 @@ class Json0:
 
         if ca.li_:
             # shift cn index if it's affected by the insert
-            if priority == 'right' and i_n == i_a:
+            if i_n == i_a and (priority == 'right' or cn.ld_ or lc < ln):
                 cn1.p[la - 1] += 1
             if i_a < i_n:
                 cn1.p[la - 1] += 1
