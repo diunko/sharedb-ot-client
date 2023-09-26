@@ -127,8 +127,15 @@ class Json0:
 
         # is cn operating on/under the same list as ca?
         if lc == la or lc == la - 1:
+            # lc == la means (lc == la <= ln)
+            #   cn.p is exactly the same or narrower as ca.p
+
+            # lc == la - 1 example:
+            #   ca.p == ['a','b','c',3]
+            #   cn.p == ['a','b','c',4,'d']
             pass
         else:
+            # lc < la - 1 means that cn.p is strictly broader then or non-intersecting with ca.p
             d.append(cn1)
             return d
 
