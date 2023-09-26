@@ -67,16 +67,6 @@ class Json0:
         ref = data
         for k in path:
             ref = ref[k]
-        if op.li_ or op.ld_:
-            assert type(key) == int
-            assert type(ref) == list
-            if op.li_:
-                ref.insert(key, op.li)
-            elif op.ld_:
-                ref.pop(key)
-            else:
-                assert False, f"shouldn't reach here, op:{op}"
-            return
 
         if op.oi_ or op.od_:
             assert type(key) == str
@@ -91,6 +81,23 @@ class Json0:
                                 data, path, key)
             else:
                 assert False, f"shouldn't reach here, op: {op}"
+            return
+
+        if op.li_ and op.ld_:
+            assert type(key) == int
+            assert type(ref) == list
+            ref[key] = op.li
+            return
+
+        if op.li_ or op.ld_:
+            assert type(key) == int
+            assert type(ref) == list
+            if op.li_:
+                ref.insert(key, op.li)
+            elif op.ld_:
+                ref.pop(key)
+            else:
+                assert False, f"shouldn't reach here, op:{op}"
             return
 
         assert False, f"shouldn't reach here, op: {op}"
@@ -109,12 +116,150 @@ class Json0:
     def transform_component(d: list[Op], cn: Op, ca: Op, priority='left'):
         """transform c_n so it applies to a document with c_a applied."""
 
+        if ca.li_ and ca.ld_:
+            return Json0.transform_component_l_op_a_reset(d, cn, ca, priority)
+        if cn.li_ and cn.ld_:
+            return Json0.transform_component_l_op_n_reset(d, cn, ca, priority)
         if ca.li_ or ca.ld_:
             return Json0.transform_component_l_op(d, cn, ca, priority)
         if ca.oi_ or ca.od_:
             return Json0.transform_component_o_op(d, cn, ca, priority)
         else:
             assert False, "don't support other cases for now"
+
+    @staticmethod
+    def transform_component_l_op_a_reset(d: list[Op], cn: Op, ca: Op, priority='left'):
+        p_common = common_path(ca, cn)
+        la = len(ca.p)
+        ln = len(cn.p)
+        lc = len(p_common)
+        cn1 = clone_op(cn)
+
+        assert ca.li_ and ca.ld_
+
+        # is cn operating on/under the same list as ca?
+        if lc == la or lc == la - 1:
+            # lc == la means (lc == la <= ln)
+            #   cn.p is exactly the same or narrower as ca.p
+
+            # lc == la - 1 example:
+            #   ca.p == ['a','b','c',3]
+            #   cn.p == ['a','b','c',4,'d']
+            pass
+        else:
+            # lc < la - 1 means that cn.p is strictly broader then or non-intersecting with ca.p
+            d.append(cn1)
+            return d
+
+        i_n = cn.p[la - 1]
+        i_a = ca.p[la - 1]
+        assert type(i_n) == int and type(i_a) == int
+
+        if i_a != i_n:
+            # no intersection
+            d.append(cn1)
+            return d
+        elif i_a == i_n:
+            if la == lc == ln:
+                if cn.li_ and cn.ld_:
+                    # two reset ops at the same path
+                    # select which wins by priority
+                    if priority == 'left':
+                        d.append(cn1)
+                        return d
+                    else:
+                        # discard cn
+                        return d
+                elif cn.ld_:
+                    if priority == 'left':
+                        d.append(cn1)
+                        return d
+                    else:
+                        # applied reset overrides a delete
+                        # discard cn
+                        return d
+                else:
+                    d.append(cn1)
+                    return d
+            elif la < ln:
+                # discard cn
+                return d
+            elif ln < la:
+                # means cn is strictly broader
+                assert False, "shouldn't reach here"
+        assert False, "shouldn't reach here"
+
+    @staticmethod
+    def transform_component_l_op_n_reset(d: list[Op], cn: Op, ca: Op, priority='left'):
+        p_common = common_path(ca, cn)
+        la = len(ca.p)
+        ln = len(cn.p)
+        lc = len(p_common)
+        cn1 = clone_op(cn)
+
+        assert (cn.li_ and cn.ld_  # cn is reset
+                and (ca.li_ or ca.ld_)  # ca is list op
+                and not (ca.li_ and ca.ld_))  # ca is not reset
+
+        # is cn operating on/under the same list as ca?
+        if lc == la or lc == la - 1:
+            # lc == la means (lc == la <= ln)
+            #   cn.p is exactly the same or narrower as ca.p
+
+            # lc == la - 1 example:
+            #   ca.p == ['a','b','c',3]
+            #   cn.p == ['a','b','c',4,'d']
+            pass
+        else:
+            # lc < la - 1 means that cn.p is strictly broader then or non-intersecting with ca.p
+            d.append(cn1)
+            return d
+
+        i_n = cn.p[la - 1]
+        i_a = ca.p[la - 1]
+        assert type(i_n) == int and type(i_a) == int
+
+        # when do we have to unconditionally discard cn?
+        #   an is a delete broader then cn
+        #
+        # when do we have to resolve conflict?
+        #   for the same path, an is delete cn is reset
+        #
+        # when do we have to shift index on cn?
+        #   cn is for same/later index then ca
+        #
+        # everything else leaves cn the same
+
+        # unconditionally discard cn:
+        #   an is a delete broader then cn
+        if la <= lc < ln and ca.ld_:
+            # discard cn
+            return d
+
+        # resolve conflict:
+        #   for the same path, an is delete cn is reset
+        if la == lc == ln and ca.ld_:
+            if priority == 'left':
+                d.append(cn1)
+                return d
+            else:
+                return d
+
+        # when do we have to shift index on cn?
+        #   cn is for same/later index then ca
+        if i_a <= i_n:
+            if ca.ld_:
+                cn1.p[la - 1] -= 1
+            elif ca.li_:
+                cn1.p[la - 1] += 1
+            else:
+                assert False, "shouldn't reach here"
+            d.append(cn1)
+            return d
+
+        # everything else leaves cn the same
+        d.append(cn1)
+        return d
 
     @staticmethod
     def transform_component_l_op(d: list[Op], cn: Op, ca: Op, priority='left'):
