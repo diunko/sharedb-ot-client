@@ -11,7 +11,7 @@ import sharedb.protocol as proto
 
 Path = list[Union[str, int]]
 
-DEBUG = False
+DEBUG = True
 
 Match = Tuple[Op, Tuple[(Indices := list), (_Ref := Union[list, dict])]]
 
@@ -226,6 +226,12 @@ class Doc:
 
         self._inflight_op = None
 
+    async def _test_send_one_op(self):
+        assert 0 < len(self.pending_ops)
+        m: 'proto.Op' = self._shift_op_msg()
+        m.seq = self._conn._next_seq()
+        await self._conn._send(m)
+
     async def _test_send_one_op_and_wait_ack(self):
         assert 0 < len(self.pending_ops)
         m: 'proto.Op' = self._shift_op_msg()
@@ -291,6 +297,7 @@ class Doc:
         # TODO: extend this to buffer ops as well
         assert 0 == len(self.pending_ops), "only in-flight mode for now"
 
+        DEBUG and print('_push_op_msg', op)
         op_A = op
         if self._inflight_op is not None:
             op_B = self._inflight_op

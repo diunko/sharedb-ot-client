@@ -62,6 +62,7 @@ class Connection:
         try:
             while not self._stop:
                 m: proto.Op = await self.recv()
+                self.log.debug('main_ops_loop: got msg: %s', m)
                 assert m.a == 'op', f'expecting only an Op msg, got: {m}'
                 d = self.collections[m.c][m.d]
                 if m.is_ack:
@@ -70,6 +71,9 @@ class Connection:
                     d._push_op_msg(m)
         except websockets.exceptions.ConnectionClosedOK:
             self._stop = True
+        except Exception as e:
+            self.log.exception('main_ops_loop: uncaught exception')
+            raise e
 
     async def _send(self, m):
         d = proto.Protocol.encode_dict(m)
