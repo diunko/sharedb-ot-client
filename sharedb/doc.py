@@ -1,6 +1,6 @@
 import asyncio
 import dataclasses
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict, is_dataclass
 from typing import Optional, Any, Union, Tuple
 import random
 
@@ -83,6 +83,83 @@ class OpSubscription:
         return self.read_stream()
 
 
+class OpProxy:
+    def __init__(self, doc: 'Doc'):
+        self._doc = doc
+        self._path = []
+        self._ref = self._doc.data
+
+    def __getattr__(self, key):
+        if key == '_':
+            return self._ref
+        v = self._ref[key]
+        self._path.append(key)
+        if self.is_container(v):
+            self._ref = v
+            return self
+        elif self.is_terminal(v):
+            return v
+        else:
+            assert False, f"Doc[{self._path}] is neither terminal nor container {v}"
+
+    def __getitem__(self, idx):
+        return self.__getattr__(idx)
+
+    def __setattr__(self, key, value):
+        if key[0] == '_':
+            return super().__setattr__(key, value)
+        if is_dataclass(value):
+            value = asdict(value)
+        if isinstance(self._ref, dict):
+            # TODO: account for old dict value?
+            op = Op(p=[*self._path, key], oi=value)
+        elif isinstance(self._ref, list):
+            op = Op(p=[*self._path, key], li=value, ld=True)
+        else:
+            assert False, f"setting attr Doc[{self._path}, {key}] not on a container {self._ref}"
+        self._doc.apply([op])
+
+    def __setitem__(self, idx, value):
+        if isinstance(self._ref, list):
+            if is_dataclass(value):
+                value = asdict(value)
+            self._ref[idx] = value
+            return
+        self.__setattr__(idx, value)
+
+    def __delattr__(self, name):
+        assert isinstance(self._ref, dict)
+        assert name in self._ref
+        op = Op(p=[*self._path, name], od=True)
+        self._doc.apply([op])
+
+    def __delitem__(self, key):
+        if isinstance(self._ref, dict):
+            assert key in self._ref
+            op = Op(p=[*self._path, key], od=True)
+        elif isinstance(self._ref, list):
+            assert isinstance(idx := key, int) and idx < len(self._ref)
+            op = Op(p=[*self._path, idx], ld=True)
+        else:
+            assert False, f"{key} should exist in {self._ref}"
+        self._doc.apply([op])
+
+    def append(self, item):
+        assert isinstance(self._ref, list)
+        if is_dataclass(item):
+            item = asdict(item)
+        L = len(self._ref)
+        p = [*self._path, L]
+        self._doc.apply([Op(p=p, li=item)])
+
+    @staticmethod
+    def is_container(v):
+        return isinstance(v, (list, dict))
+
+    @staticmethod
+    def is_terminal(v):
+        return isinstance(v, (int, str, bool))
+
 @dataclass
 class DocOp:
     v: int
@@ -113,6 +190,8 @@ class Doc:
     pending_ops: list[list[Op]] = field(default_factory=list)
     _inflight_op: DocOp = None
     _conn: 'client_v1.Connection' = None
+
+    Type = Any
 
     @property
     def full_id(self) -> str:
@@ -367,6 +446,10 @@ class Doc:
             src=self._conn.id if self._conn is not None else 'unk-src-id',
             seq=0
         )
+
+    def op(self) -> Type:
+        return OpProxy(self)
+
 
 
 def _set_in(ref: dict, path: Path, v: Any):
