@@ -2,6 +2,8 @@ import asyncio
 import dataclasses
 from dataclasses import dataclass, field, asdict, is_dataclass
 from typing import Optional, Any, Union, Tuple
+from typing import TypeVar, Generic, Type
+
 import random
 
 from delta import Delta
@@ -160,6 +162,7 @@ class OpProxy:
     def is_terminal(v):
         return isinstance(v, (int, str, bool))
 
+
 @dataclass
 class DocOp:
     v: int
@@ -175,8 +178,11 @@ class DocOp:
         return dataclasses.asdict(self)
 
 
+T = TypeVar('T')
+
+
 @dataclass
-class Doc:
+class Doc(Generic[T]):
     id: str = 'doc-id'
     coll_id: str = 'coll-id'
 
@@ -191,7 +197,11 @@ class Doc:
     _inflight_op: DocOp = None
     _conn: 'client_v1.Connection' = None
 
-    Type = Any
+    DocType: Type[T] = None
+
+    def __post_init__(self):
+        if self.DocType is not None:
+            self.data = asdict(self.DocType())
 
     @property
     def full_id(self) -> str:
@@ -447,9 +457,8 @@ class Doc:
             seq=0
         )
 
-    def op(self) -> Type:
+    def op(self) -> T:
         return OpProxy(self)
-
 
 
 def _set_in(ref: dict, path: Path, v: Any):

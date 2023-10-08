@@ -2,24 +2,7 @@ from dataclasses import dataclass, field, asdict, is_dataclass
 from typing import List
 import pytest
 
-from sharedb.doc import Doc, Op, OpProxy
-
-
-def mytype(T):
-    def wrap(C):
-        @dataclass
-        class My(C):
-            Type = T
-
-            def __post_init__(self):
-                self.data = asdict(self.Type())
-
-            def op(self) -> Type:
-                return OpProxy(self)
-
-        return My
-
-    return wrap
+from sharedb.doc import Doc
 
 
 @dataclass
@@ -39,12 +22,6 @@ class Chat:
 class SessionState:
     chat: Chat = field(default_factory=Chat)
     chat2: Chat = field(default_factory=Chat)
-
-
-@mytype(SessionState)
-@dataclass
-class SessionStateDoc(Doc):
-    pass
 
 
 @pytest.mark.skip
@@ -67,7 +44,7 @@ def test_doc_props_typehints_exmample1():
 def test_doc_props_typehints_exmample2():
     print('====')
 
-    d = SessionStateDoc()
+    d = Doc[SessionState](DocType=SessionState)
     print('doc v0', d)
 
     ########
