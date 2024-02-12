@@ -27,6 +27,7 @@ class WSLogged extends WebSocketJSONStream {
     push(chunk, encoding) {
         console.log('<<<<<<<<<<<<<<<', this.socketId)
         console.log(chunk)
+        console.log(JSON.stringify(chunk))
         console.log('--------------')
         return super.push(chunk, encoding)
     }
@@ -168,6 +169,7 @@ class TestClient {
 
         this.main = this.sharedb.get('examples', 'main')
         this.chat = this.sharedb.get('examples', 'chat')
+        this.story = this.sharedb.get('examples', 'story')
         this.testCreate = this.sharedb.get('examples', 'testCreate')
     }
 
@@ -198,6 +200,10 @@ class TestClient {
 
         console.log('doc after create invoked', this.docRepr(this.testCreate))
 
+        this.story.create([{'insert': 'this is my story'}], 'rich-text', () => {
+            console.log('story created')
+            this.story.subscribe()
+        })
     }
 
     docRepr(doc) {
