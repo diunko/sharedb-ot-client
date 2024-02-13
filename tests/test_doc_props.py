@@ -25,7 +25,7 @@ class SessionState:
 
 
 @pytest.mark.skip
-def test_doc_props_typehints_exmample1():
+def test_doc_props_typehints_example1():
     print('====')
 
     c = SessionState()

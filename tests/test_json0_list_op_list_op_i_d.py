@@ -1,7 +1,4 @@
-import pytest
-
-from sharedb.json0 import Op, Json0, clone_op, dict_as_ops
-from copy import deepcopy
+from sharedb.ot.json0 import Op, Json0
 
 
 def test_json0_list_op__same_list__insert_insert():

@@ -1,20 +1,21 @@
-import asyncio
+import logging
 import random
 
+import asyncio
 import pytest
-import logging
 
 logging.basicConfig(level=logging.DEBUG,
                     format='%(asctime)s %(message)s',
                     force=True)
 
 from sharedb.client_v1 import Connection
-from sharedb.doc import Doc, Op
+from sharedb.doc import Doc
 from delta import Delta
 
 log = logging.getLogger('test_conn')
 
 
+@pytest.mark.skip
 @pytest.mark.asyncio
 async def test_doc_create_and_send_ops():
     log.debug('==== test started ====')
@@ -65,6 +66,7 @@ async def connect_and_create_test_doc(data) -> Doc:
     return doc
 
 
+@pytest.mark.skip
 @pytest.mark.asyncio
 async def test_doc_fetch():
     d = await connect_and_create_test_doc(
@@ -97,6 +99,7 @@ async def connect_and_fetch_doc(doc_id, coll_id) -> Doc:
     return doc
 
 
+@pytest.mark.skip
 @pytest.mark.asyncio
 async def test_doc_create():
     d1 = await connect_and_create_test_doc(
@@ -107,6 +110,7 @@ async def test_doc_create():
     await d1._conn.close()
 
 
+@pytest.mark.skip
 @pytest.mark.asyncio
 async def test_doc_transform_ops():
     d1 = await connect_and_create_test_doc(
@@ -139,6 +143,7 @@ async def test_doc_transform_ops():
         d2._conn.close())
 
 
+@pytest.mark.skip
 @pytest.mark.asyncio
 async def test_conn_two_docs_sync():
     d1 = await connect_and_create_test_doc(

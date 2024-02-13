@@ -1,7 +1,7 @@
 from delta import Delta
 from dataclasses import dataclass, field
 from typing import Optional, Any, Union
-from sharedb.json0 import Json0, Op
+from sharedb.ot.json0 import Json0, Op
 
 Path = list[Union[str, int]]
 

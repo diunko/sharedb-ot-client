@@ -1,4 +1,4 @@
-from sharedb.json0 import Op, Json0, clone_op, dict_as_ops
+from sharedb.ot.json0 import Op, Json0, dict_as_ops
 from copy import deepcopy
 
 

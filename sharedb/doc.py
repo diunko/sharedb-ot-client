@@ -6,8 +6,7 @@ from typing import TypeVar, Generic, Type
 
 import random
 
-from delta import Delta
-from sharedb.json0 import Json0, Op
+from sharedb.ot.json0 import Json0, Op
 from sharedb import client_v1
 import sharedb.protocol as proto
 
@@ -30,7 +29,7 @@ class OpSubscription:
         return self
 
     def match(self, path: Path, op: Op) -> Optional[Match]:
-        DEBUG and print('==== mathing p against m')
+        DEBUG and print('==== matching p against m')
         DEBUG and print('== m', self._path)
         DEBUG and print('== p', path)
 
