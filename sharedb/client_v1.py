@@ -1,6 +1,6 @@
 from asyncio import Future, create_task
 from dataclasses import dataclass, field
-from typing import Callable
+from typing import Callable, List
 from collections import defaultdict
 
 import json
@@ -8,8 +8,9 @@ import websockets
 from websockets.client import WebSocketClientProtocol
 import logging
 
-from sharedb import doc
+from sharedb import doc, text
 import sharedb.protocol as proto
+from delta import Delta
 
 Msg = dict
 
@@ -128,6 +129,43 @@ class Connection:
             self.log.warning('<Session %s> recv exception %s', self, e)
             raise
 
+    async def create_text(self, doc_id, coll_id, data: Delta) -> 'text.Doc':
+        d = text.Doc.create_(data=data, id=doc_id, coll_id=coll_id)
+        d._conn = self
+
+        self.docs[d.full_id] = d
+        self.collections[d.coll_id][d.id] = d
+
+        msg = {
+            'a': 'op',
+            'c': d.coll_id, 'd': d.id,
+            'v': None,
+            'seq': self._next_seq(),
+            'x': {},
+            'create': {
+                'type': 'rich-text',
+
+                # TODO: check it out. Looks like this should be a list of delta's ops
+                # TODO: should I clone it? likely yes.
+                'data': d.data.ops
+            }
+        }
+        await self._send_dict(msg)
+
+        msg_ack = await self.recv_dict()
+        # assert msg_ack == {
+        #     "src": "4e4713e6398b8e077a73f416673f7139", "seq": 1, "v": 0,
+        #     "a": "op", "c": "examples", "d": "testCreate"}
+        assert msg_ack['src'] == self.id
+        assert msg_ack['seq'] == msg['seq']
+        assert msg_ack['a'] == 'op'
+
+        d.v = msg_ack['v'] + 1
+
+        await d._test_subscribe()
+
+        return d
+
     async def create_doc(self, doc_id, coll_id, data: dict) -> 'doc.Doc':
         # send create
         d = doc.Doc.create_(data=data, id=doc_id, coll_id=coll_id)
@@ -158,6 +196,80 @@ class Connection:
 
         await d._test_subscribe()
 
+        return d
+
+    async def fetch_many(self, doc_ids: List[str], coll_id):
+
+        msg = {
+            'a': 'bs',
+            'c': coll_id,
+            'b': doc_ids
+        }
+        await self._send_dict(msg)
+
+        msg_sub = await self.recv_dict()
+        assert msg_sub == {
+            "data": {"mainQuillDoc": {"v": 1, "data": {"ops": []},
+                                      "type": "http://sharejs.org/types/rich-text/v1"},
+                     "playgroundQuillDoc": {"v": 1, "data": {"ops": []},
+                                            "type": "http://sharejs.org/types/rich-text/v1"},
+                     "stateDoc": {"v": 1, "data": {
+                         "documentInfo": {"isEvaluating": False, "isImproving": False, "isFixing": False,
+                                          "isReplying": False, "guideline": False, "evaluation": {},
+                                          "settings": {"isColoringEnabled": True, "isStreamingEnabled": True}},
+                         "improvements": {"list": [], "isLoading": False}, "chatEvents": [], "logs": [],
+                         "feedbacks": [],
+                         "localSettings": {}}}},
+            "a": "bs", "c": "170775850673012"}
+
+        assert msg_sub['a'] == 'bs'
+        assert msg_sub['c'] == coll_id
+        for _id in doc_ids:
+            assert _id in msg_sub['data']
+
+        docs = {}
+        for _id in doc_ids:
+            doc_msg = msg_sub['data'][_id]
+            doc_type = msg_sub['data'][_id].get('type', 'json0')
+            d = doc.Doc(
+                id=_id, coll_id=coll_id, v=doc_msg['v'],
+                data=doc_msg['data'],
+                _conn=self,
+            )
+        self.docs[d.full_id] = d
+        self.collections[d.coll_id][d.id] = d
+        return d
+
+    async def fetch_text(self, doc_id, coll_id):
+        msg = {
+            'a': 'bs',
+            'c': coll_id,
+            'b': [doc_id]
+        }
+        await self._send_dict(msg)
+
+        msg_sub = await self.recv_dict()
+        # assert msg_sub == {
+        #     'a': 'bs',
+        #     'c': 'test-coll-1060088',
+        #     'data': {
+        #         'test-doc-1060088': {
+        #             'v': 1,
+        #             'data': {'ops': [{'insert': 'testing testing testing\n'}]},
+        #             'type': 'http://sharejs.org/types/rich-text/v1'}}}
+
+        assert msg_sub['a'] == 'bs'
+        assert msg_sub['c'] == coll_id
+        assert doc_id in msg_sub['data']
+
+        doc_msg = msg_sub['data'][doc_id]
+        d = text.Doc(
+            id=doc_id, coll_id=coll_id, v=doc_msg['v'],
+            data=Delta(ops=doc_msg['data']['ops']),
+            _conn=self,
+        )
+        self.docs[d.full_id] = d
+        self.collections[d.coll_id][d.id] = d
         return d
 
     async def fetch_doc(self, doc_id, coll_id):

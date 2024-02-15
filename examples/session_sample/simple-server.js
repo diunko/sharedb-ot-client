@@ -27,6 +27,7 @@ class WSLogged extends WebSocketJSONStream {
     push(chunk, encoding) {
         console.log('<<<<<<<<<<<<<<<', this.socketId)
         console.log(chunk)
+        console.log(JSON.stringify(chunk))
         console.log('--------------')
         return super.push(chunk, encoding)
     }

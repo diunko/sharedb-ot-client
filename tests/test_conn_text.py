@@ -4,18 +4,16 @@ import random
 import asyncio
 import pytest
 
-logging.basicConfig(level=logging.DEBUG,
-                    format='%(asctime)s %(message)s',
-                    force=True)
-
 from sharedb.client_v1 import Connection
 from sharedb.doc import Doc
 from delta import Delta
 
+logging.basicConfig(level=logging.DEBUG,
+                    format='%(asctime)s %(message)s',
+                    force=True)
 log = logging.getLogger('test_conn')
 
 
-@pytest.mark.skip
 @pytest.mark.asyncio
 async def test_doc_create_and_send_ops():
     log.debug('==== test started ====')
@@ -28,18 +26,22 @@ async def test_doc_create_and_send_ops():
     await conn.connect()
 
     # TODO: what if doc is already there?
-    doc = await conn.create_text_doc(
+    doc = await conn.create_text(
         doc_id='testing-' + rand_id, coll_id='collection-bla',
-        data=[{'insert': 'this is a story\n'}]
+        data=Delta(ops=[{'insert': 'this is a story\n'}])
     )
 
     print('doc')
     print(doc)
 
-    doc.apply(Delta(ops=[{'retain': 5}, {'insert': ' truly'}]))
+    doc.apply(Delta(ops=[{'retain': 4}, {'insert': ' truly'}]))
 
-    ack_msg = await doc._test_send_one_op_and_wait_ack()
-    print('got ack', ack_msg)
+    print('doc changed')
+    print(doc)
+
+    if True:
+        ack_msg = await doc._test_send_one_op_and_wait_ack()
+        print('got ack', ack_msg)
 
     await conn._conn.close()
 
@@ -58,7 +60,7 @@ async def connect_and_create_test_doc(data) -> Doc:
     await conn.connect()
 
     # TODO: what if doc is already there?
-    doc = await conn.create_doc(
+    doc = await conn.create_text(
         doc_id='test-doc-' + rand_id, coll_id='test-coll-' + rand_id,
         data=data
     )
@@ -66,7 +68,6 @@ async def connect_and_create_test_doc(data) -> Doc:
     return doc
 
 
-@pytest.mark.skip
 @pytest.mark.asyncio
 async def test_doc_fetch():
     d = await connect_and_create_test_doc(
@@ -79,7 +80,7 @@ async def test_doc_fetch():
     conn = Connection(url)
     await conn.connect()
 
-    d2 = await conn.fetch_doc(d.id, d.coll_id)
+    d2 = await conn.fetch_text(d.id, d.coll_id)
     print(d2)
 
     d2.apply(Delta(ops=[{'insert': 'testing '}]))
@@ -95,11 +96,10 @@ async def connect_and_fetch_doc(doc_id, coll_id) -> Doc:
     conn = Connection(url)
     await conn.connect()
 
-    doc = await conn.fetch_doc(doc_id, coll_id)
+    doc = await conn.fetch_text(doc_id, coll_id)
     return doc
 
 
-@pytest.mark.skip
 @pytest.mark.asyncio
 async def test_doc_create():
     d1 = await connect_and_create_test_doc(
@@ -110,7 +110,6 @@ async def test_doc_create():
     await d1._conn.close()
 
 
-@pytest.mark.skip
 @pytest.mark.asyncio
 async def test_doc_transform_ops():
     d1 = await connect_and_create_test_doc(
@@ -143,7 +142,6 @@ async def test_doc_transform_ops():
         d2._conn.close())
 
 
-@pytest.mark.skip
 @pytest.mark.asyncio
 async def test_conn_two_docs_sync():
     d1 = await connect_and_create_test_doc(

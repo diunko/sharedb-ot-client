@@ -1,3 +1,5 @@
+from typing_extensions import deprecated
+
 import asyncio
 import dataclasses
 from dataclasses import dataclass, field, asdict, is_dataclass
@@ -7,165 +9,21 @@ from typing import TypeVar, Generic, Type
 import random
 
 from sharedb.ot.json0 import Json0, Op
+from sharedb.ot.text1 import Text1
 from sharedb import client_v1
 import sharedb.protocol as proto
+
+from delta import Delta
 
 Path = list[Union[str, int]]
 
 DEBUG = True
 
-Match = Tuple[Op, Tuple[(Indices := list), (_Ref := Union[list, dict])]]
-
-
-class OpSubscription:
-    def __init__(self, doc: 'Doc'):
-        self._doc = doc
-        self._root = doc.data
-        self._path = []
-        self._push_q: asyncio.Queue = asyncio.Queue()
-
-    def __getattr__(self, item):
-        self._path.append(item)
-        return self
-
-    def match(self, path: Path, op: Op) -> Optional[Match]:
-        DEBUG and print('==== matching p against m')
-        DEBUG and print('== m', self._path)
-        DEBUG and print('== p', path)
-
-        matched = True
-        _ref = self._doc.data
-        indices = []
-        current = _ref
-        i_m, i_p = 0, 0
-        while i_m < len(self._path) and i_p < len(path):
-            m = self._path[i_m]
-            p = path[i_p]
-            # m is from matcher
-            # p is from op path
-            DEBUG and print('i_m, m', i_m, m)
-            DEBUG and print('i_p, p', i_p, p)
-
-            if m == '_':
-                indices.append(p)
-            elif m == '_ref':
-                # just store reference to current data node, continue matching
-                _ref = current
-                i_m += 1
-                continue
-            elif m != p:
-                matched = False
-                break
-            else:
-                assert m == p
-
-            i_m += 1
-            i_p += 1
-            current = current[p]
-
-        if not matched:
-            return None
-
-        return op, (indices, _ref)
-
-    async def read_stream(self):
-        DEBUG and print('read_stream: start')
-        while (op := await self._push_q.get()) is not None:
-            DEBUG and print('read_stream: got op', op)
-            yield op
-
-    def notify_op(self, op: Op):
-        DEBUG and print('notify_op called', op)
-        if m := self.match(op.p, op):
-            self._push_q.put_nowait(m)
-
-    def subscribe(self):
-        self._doc.subscriptions.append(self.notify_op)
-        return self.read_stream()
-
-
-class OpProxy:
-    def __init__(self, doc: 'Doc'):
-        self._doc = doc
-        self._path = []
-        self._ref = self._doc.data
-
-    def __getattr__(self, key):
-        if key == '_':
-            return self._ref
-        v = self._ref[key]
-        self._path.append(key)
-        if self.is_container(v):
-            self._ref = v
-            return self
-        elif self.is_terminal(v):
-            return v
-        else:
-            assert False, f"Doc[{self._path}] is neither terminal nor container {v}"
-
-    def __getitem__(self, idx):
-        return self.__getattr__(idx)
-
-    def __setattr__(self, key, value):
-        if key[0] == '_':
-            return super().__setattr__(key, value)
-        if is_dataclass(value):
-            value = asdict(value)
-        if isinstance(self._ref, dict):
-            # TODO: account for old dict value?
-            op = Op(p=[*self._path, key], oi=value)
-        elif isinstance(self._ref, list):
-            op = Op(p=[*self._path, key], li=value, ld=True)
-        else:
-            assert False, f"setting attr Doc[{self._path}, {key}] not on a container {self._ref}"
-        self._doc.apply([op])
-
-    def __setitem__(self, idx, value):
-        if isinstance(self._ref, list):
-            if is_dataclass(value):
-                value = asdict(value)
-            self._ref[idx] = value
-            return
-        self.__setattr__(idx, value)
-
-    def __delattr__(self, name):
-        assert isinstance(self._ref, dict)
-        assert name in self._ref
-        op = Op(p=[*self._path, name], od=True)
-        self._doc.apply([op])
-
-    def __delitem__(self, key):
-        if isinstance(self._ref, dict):
-            assert key in self._ref
-            op = Op(p=[*self._path, key], od=True)
-        elif isinstance(self._ref, list):
-            assert isinstance(idx := key, int) and idx < len(self._ref)
-            op = Op(p=[*self._path, idx], ld=True)
-        else:
-            assert False, f"{key} should exist in {self._ref}"
-        self._doc.apply([op])
-
-    def append(self, item):
-        assert isinstance(self._ref, list)
-        if is_dataclass(item):
-            item = asdict(item)
-        L = len(self._ref)
-        p = [*self._path, L]
-        self._doc.apply([Op(p=p, li=item)])
-
-    @staticmethod
-    def is_container(v):
-        return isinstance(v, (list, dict))
-
-    @staticmethod
-    def is_terminal(v):
-        return isinstance(v, (int, str, bool))
-
 
 @dataclass
 class DocOp:
     v: int
-    op: list[Op]
+    op: Delta
 
     op_id: str = 'unk-op-id'
     seq: int = 0
@@ -174,14 +32,53 @@ class DocOp:
     src: str = 'unk-src-id'
 
     def to_dict(self):
-        return dataclasses.asdict(self)
+        op = {'ops': self.op.ops}
+        d = dataclasses.asdict(self)
+        d['op'] = op
+        return d
+
+    @classmethod
+    def from_dict(cls, d: dict):
+        d1 = {}
+        for name, f in cls.__dataclass_fields__.items():
+            if name in d:
+                d1[name] = d[name]
+            elif not isinstance(f.default, dataclasses._MISSING_TYPE):
+                d1[name] = f.default
+            else:
+                assert False, f"field {name} is missing and has no default value"
+        d1['op'] = Delta(ops=d['op']['ops'])
+        return cls(**d1)
 
 
-T = TypeVar('T')
+def test_doc_op_serialize():
+    op = DocOp(v=0, op=Delta(ops=[{'insert': 'a'}]))
+    d_op = op.to_dict()
+
+    assert d_op == {'v': 0, 'op': {'ops': [{'insert': 'a'}]},
+                    'op_id': 'unk-op-id', 'seq': 0, 'c': 'c_default',
+                    'd': 'd_default', 'src': 'unk-src-id'}
+
+    op1 = DocOp.from_dict(d_op)
+    assert op1 == op
+
+    # deserialize should fail if the non-default field is missing
+    d_op1 = {
+        # v is missing
+        'op': {'ops': [{'insert': 'a'}]}}
+    try:
+        op1 = DocOp.from_dict(d_op1)
+        assert False, f"deserialize unexpectedly succeeded: {op1}"
+    except Exception as e:
+        assert True, f"deserialize failed (as expected): {e}"
+
+
+def create_empty_delta():
+    return Delta(ops=[{'insert': ''}])
 
 
 @dataclass
-class Doc(Generic[T]):
+class Doc:
     id: str = 'doc-id'
     coll_id: str = 'coll-id'
 
@@ -189,51 +86,28 @@ class Doc(Generic[T]):
     seq: int = 0
 
     v: int = 0
-    type: str = 'json0'
+    type: str = 'rich-text'
 
-    data: dict = None
+    data: Delta = field(default_factory=create_empty_delta)
     subscriptions: list = field(default_factory=list)
 
-    pending_ops: list[list[Op]] = field(default_factory=list)
+    pending_ops: list[Delta] = field(default_factory=list)
     _inflight_op: DocOp = None
     _conn: 'client_v1.Connection' = None
-
-    DocType: Type[T] = None
-
-    def __post_init__(self):
-        if self.DocType is not None:
-            self.data = asdict(self.DocType())
 
     @property
     def full_id(self) -> str:
         return f'{self.coll_id}:{self.id}'
 
     @classmethod
-    def create_(cls, data: dict, id='doc-id', coll_id='coll-id'):
+    def create_(cls, data: Delta, id='doc-id', coll_id='coll-id'):
         doc = Doc(data=data, id=id, coll_id=coll_id, v=0)
         return doc
 
     def __repr__(self):
-        return f'Doc(id={self.id}, coll_id={self.coll_id}, v={self.v}, data={self.data}, _inflight_op={self._inflight_op})'
+        return f'Doc(type={self.type} id={self.id}, coll_id={self.coll_id}, v={self.v}, data={self.data}, _inflight_op={self._inflight_op})'
 
-    def __getitem__(self, k):
-        if isinstance(k, (list, tuple)):
-            path = k
-        elif isinstance(k, (int, str)):
-            path = [k]
-        else:
-            assert False, "bad type match"
-        return _get_in(self.data, path)
-
-    def __setitem__(self, k, v):
-        if isinstance(k, (list, tuple)):
-            path = k
-        elif isinstance(k, (int, str)):
-            path = [k]
-        else:
-            assert False, "bad type match"
-        return _set_in(self.data, path, v)
-
+    @deprecated
     async def create(self, data: dict):
         assert self.v == 0
         assert self.data is None
@@ -262,8 +136,9 @@ class Doc(Generic[T]):
         assert m['v'] == 0
         self.v += 1
 
-    def apply(self, ops: list[Op]):
-        Json0.apply(self.data, ops)
+    def apply(self, ops: Delta):
+        data1 = Text1.apply(self.data, ops)
+        self.data = data1
         self.pending_ops.append(ops)
 
     def _next_seq(self):
@@ -281,6 +156,9 @@ class Doc(Generic[T]):
             d=self.id, c=self.coll_id,
             v=self.v, seq=seq,
             src=self._conn.id if self._conn is not None else self.full_id,
+
+            # TODO: fix types arithmetics here
+            # for now this might just work
             op=ops0
         )
         self._inflight_op = m
@@ -307,14 +185,14 @@ class Doc(Generic[T]):
         self.v += 1
         self._inflight_op = None
 
-    # def _ack(self, op_id, v):
-    #     assert (op := self._inflight_op) is not None
-    #     assert self.v == v
-    #     assert op_id == op.op_id
-    #
-    #     self.v += 1
-    #
-    #     self._inflight_op = None
+    def _ack(self, op_id, v):
+        assert (op := self._inflight_op) is not None
+        assert self.v == v
+        assert op_id == op.op_id
+
+        self.v += 1
+
+        self._inflight_op = None
 
     async def _test_send_one_op(self):
         assert 0 < len(self.pending_ops)
@@ -392,8 +270,8 @@ class Doc(Generic[T]):
         if self._inflight_op is not None:
             op_B = self._inflight_op
 
-            ops_A1 = Json0.transform(op_A.op, op_B.op, 'right')
-            ops_B1 = Json0.transform(op_B.op, op_A.op, 'left')
+            ops_A1 = Text1.transform(op_A.op, op_B.op, 'right')
+            ops_B1 = Text1.transform(op_B.op, op_A.op, 'left')
 
             # TODO: XXX inplace!
             op_B.op = ops_B1
@@ -403,7 +281,7 @@ class Doc(Generic[T]):
             # op_A.v += 1
 
         # apply rebased op
-        Json0.apply(self.data, op_A.op)
+        self.data = Text1.apply(self.data, op_A.op)
         self.v = op_A.v + 1
 
         for op in op_A.op:
@@ -445,9 +323,6 @@ class Doc(Generic[T]):
 
         return op_A
 
-    def on(self):
-        return OpSubscription(self)
-
     def Op(self, op: list[Op]) -> 'proto.Op':
         return proto.Op(
             d=self.id,
@@ -457,21 +332,3 @@ class Doc(Generic[T]):
             src=self._conn.id if self._conn is not None else 'unk-src-id',
             seq=0
         )
-
-    def op(self) -> T:
-        return OpProxy(self)
-
-
-def _set_in(ref: dict, path: Path, v: Any):
-    k = path[-1]
-    for i in range(len(path) - 1):
-        p = path[i]
-        ref = ref[p]
-    ref[k] = v
-    return v
-
-
-def _get_in(ref: dict, path: Path):
-    for p in path:
-        ref = ref[p]
-    return ref

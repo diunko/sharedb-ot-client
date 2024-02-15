@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from sharedb import doc
+from delta import Delta
 
 
 class Protocol:
@@ -91,12 +92,33 @@ class Op:
             if name in d or not isinstance(f.default, dataclasses._MISSING_TYPE):
                 d1[name] = d[name] if name in d else f.default
         if 'op' in d:
-            d1['op'] = [doc.Op(**op) for op in d['op']]
+            # Delta:
+            # {"op": {"ops": [{"retain": 15}, {"insert": " "}]}}
+            if isinstance(d['op'], dict):
+                assert 'ops' in d['op']
+                d1['op'] = Delta(ops=d['op']['ops'])
+
+            # Json0:
+            # {"op": [{"p": ["improvements", "list"], "oi": []},
+            #         {"p": ["chatEvents"], "oi": []}]}
+            elif isinstance(d['op'], list):
+                d1['op'] = [doc.Op(**op) for op in d['op']]
         return cls(**d1)
 
     def to_dict(self):
         d = {k: v for k, v in dataclasses.asdict(self).items() if v is not None}
-        d['op'] = [o.to_dict() for o in self.op]
+
+        # Json0
+        if isinstance(self.op, list):
+            d['op'] = [o.to_dict() for o in self.op]
+
+        # Delta
+        elif isinstance(self.op, Delta):
+            d['op'] = {'ops': self.op.ops}
+
+        else:
+            assert False, f"unknown self.op type, {self.op}"
+
         return d
 
 
