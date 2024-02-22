@@ -68,6 +68,11 @@ def test_doc_props_typehints_exmample2():
     d.op().chat.messages.append(Message(id='m-2', role='user', content=['testing', ' 234']))
     assert d.op().chat.messages[2]._ == asdict(Message(id='m-2', role='user', content=['testing', ' 234']))
 
+    # insert to the list at arbitrary index
+    d.op().chat.messages.insert(0, Message(id='m-4', role='user', content=['testing', ' 123']))
+    # d.op().chat.messages.append(Message(id='m-2', role='user', content=['testing', ' 234']))
+    assert d.op().chat.messages[0]._ == asdict(Message(id='m-4', role='user', content=['testing', ' 123']))
+
     # set and get list item
     d.op().chat.messages[1] = Message(id='m-1.1', role='system', content=['bla', ' testing'])
     assert d.op().chat.messages[1]._ == asdict(Message(id='m-1.1', role='system', content=['bla', ' testing']))
@@ -79,6 +84,6 @@ def test_doc_props_typehints_exmample2():
 
     # delete dict item
     del d.op().chat.messages[1].role
-    assert d.op().chat.messages[1]._ == {'id': 'm-2', 'content': ['testing', ' 234']}
+    assert d.op().chat.messages[1]._ == {'id': 'm-1', 'content': ['testing', ' 123']}
 
     print('doc v1', d)

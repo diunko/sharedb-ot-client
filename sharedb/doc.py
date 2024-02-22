@@ -153,6 +153,15 @@ class OpProxy:
         p = [*self._path, L]
         self._doc.apply([Op(p=p, li=item)])
 
+    def insert(self, idx, item):
+        assert isinstance(self._ref, list)
+        if is_dataclass(item):
+            item = asdict(item)
+        L = len(self._ref)
+        assert 0 <= idx < L, f'insert within list bounds, {(0, idx, L)}'
+        p = [*self._path, idx]
+        self._doc.apply([Op(p=p, li=item)])
+
     @staticmethod
     def is_container(v):
         return isinstance(v, (list, dict))
