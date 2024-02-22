@@ -210,7 +210,7 @@ class Doc(Generic[T]):
     DocType: Type[T] = None
 
     def __post_init__(self):
-        if self.DocType is not None:
+        if self.data is None and self.DocType is not None:
             self.data = asdict(self.DocType())
 
     @property
