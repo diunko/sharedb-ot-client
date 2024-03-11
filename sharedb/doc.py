@@ -4,6 +4,8 @@ from dataclasses import dataclass, field, asdict, is_dataclass
 from typing import Optional, Any, Union, Tuple
 from typing import TypeVar, Generic, Type
 
+from copy import deepcopy
+
 import random
 
 from sharedb.ot.json0 import Json0, Op
@@ -273,8 +275,9 @@ class Doc(Generic[T]):
         self.v += 1
 
     def apply(self, ops: list[Op]):
+        send_ops = deepcopy(ops)
         Json0.apply(self.data, ops)
-        self.pending_ops.append(ops)
+        self.pending_ops.append(send_ops)
 
     def _next_seq(self):
         seq = self.seq
@@ -283,7 +286,7 @@ class Doc(Generic[T]):
         return seq, op_id
 
     def _shift_op_msg(self) -> 'proto.Op':
-        assert self._inflight_op is None
+        assert self._inflight_op is None, f'{self._inflight_op = }'
         assert 0 < len(self.pending_ops)
         ops0 = self.pending_ops.pop(0)
         seq, op_id = self._next_seq()
