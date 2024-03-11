@@ -124,7 +124,8 @@ class OpProxy:
         if isinstance(self._ref, list):
             if is_dataclass(value):
                 value = asdict(value)
-            self._ref[idx] = value
+            op = Op(p=[*self._path, idx], li=value, ld=True)
+            self._doc.apply([op])
             return
         self.__setattr__(idx, value)
 
@@ -158,7 +159,7 @@ class OpProxy:
         if is_dataclass(item):
             item = asdict(item)
         L = len(self._ref)
-        assert 0 <= idx < L, f'insert within list bounds, {(0, idx, L)}'
+        assert 0 <= idx <= L, f'insert within list bounds, {(0, idx, L)}'
         p = [*self._path, idx]
         self._doc.apply([Op(p=p, li=item)])
 

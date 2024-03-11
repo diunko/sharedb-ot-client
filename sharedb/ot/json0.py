@@ -35,6 +35,9 @@ class Op:
             for k, v in d.items()
             if k in self._fields and v is not None}
 
+    def clone(self):
+        return self.from_dict(clone_op(self.to_dict()))
+
     def __repr__(self):
         return f"Op({' '.join(f'{k}={getattr(self, k)}' for k in self._fields if getattr(self, k) is not None)})"
 
