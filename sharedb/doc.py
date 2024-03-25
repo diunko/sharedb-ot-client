@@ -331,7 +331,8 @@ class Doc(Generic[T]):
 
     async def sync(self, t=0.2):
         await self._test_send_one_op()
-        await asyncio.sleep(t)
+        while self._inflight_op is not None:
+            await asyncio.sleep(t)
 
     async def _test_send_one_op(self):
         assert 0 < len(self.pending_ops)
