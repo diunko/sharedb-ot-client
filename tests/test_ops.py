@@ -33,3 +33,7 @@ def test_ops_basic():
     )
 
     assert asdict(d_o_send_msg) == asdict(d_o_test_msg)
+
+    del d.op().items[0]
+
+    assert len(d.data['items']) == 0
