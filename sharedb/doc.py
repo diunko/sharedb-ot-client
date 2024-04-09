@@ -115,7 +115,10 @@ class OpProxy:
             value = asdict(value)
         if isinstance(self._ref, dict):
             # TODO: account for old dict value?
-            op = Op(p=[*self._path, key], oi=value)
+            if key not in self._ref:
+                op = Op(p=[*self._path, key], oi=value)
+            else:
+                op = Op(p=[*self._path, key], oi=value, od=self._ref[key])
         elif isinstance(self._ref, list):
             op = Op(p=[*self._path, key], li=value, ld=True)
         else:
