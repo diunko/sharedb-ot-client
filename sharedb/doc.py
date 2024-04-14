@@ -333,8 +333,8 @@ class Doc(Generic[T]):
     #     self._inflight_op = None
 
     async def sync(self, t=0.2):
-        await self._test_send_one_op()
         while self._inflight_op is not None:
+            await self._test_send_one_op()
             await asyncio.sleep(t)
 
     async def _test_send_one_op(self):
