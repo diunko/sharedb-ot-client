@@ -337,8 +337,11 @@ class Doc(Generic[T]):
     async def sync(self, t=0.2):
         assert self._sync_task is None
         self._sync_task = asyncio.current_task()
+        DEBUG and print('sync enter', self.id, self._sync_task)
 
         try:
+            if self._sync_exception is not None:
+                raise self._sync_exception
 
             await self._test_send_one_op()
 
@@ -351,6 +354,8 @@ class Doc(Generic[T]):
 
         finally:
             self._sync_task = None
+
+        DEBUG and print('sync exit', self.id)
 
 
     async def _test_send_one_op(self):
@@ -416,6 +421,7 @@ class Doc(Generic[T]):
         pass
 
     def _push_op_msg(self, op: 'proto.Op') -> 'proto.Op':
+        DEBUG and print('_push_op_msg enter', self._sync_task)
         try:
             assert op.v == self.v
             # transform all pending ops using transform(pending_op, doc_op, 'L')
@@ -452,11 +458,7 @@ class Doc(Generic[T]):
 
             return op_A
         except Exception as e:
-            if self._sync_task is not None:
-                self._sync_exception = e
-            else:
-                DEBUG and print('re-raising exception outside sync function', op)
-                raise
+            self._sync_exception = e
 
     def _push_op(self, doc_op: DocOp):
         assert doc_op.v == self.v
