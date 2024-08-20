@@ -7,6 +7,7 @@ import json
 import websockets
 from websockets.client import WebSocketClientProtocol
 import logging
+from loguru import logger
 
 from sharedb import doc, text
 import sharedb.protocol as proto
@@ -59,6 +60,7 @@ class Connection:
         self._main_ops_loop_coro = self.main_ops_loop()
         self._main_ops_loop_task = create_task(self._main_ops_loop_coro)
 
+    @logger.catch
     async def main_ops_loop(self):
         try:
             while not self._stop:
@@ -314,6 +316,9 @@ class Connection:
             await self._main_ops_loop_task
             self._main_ops_loop_task = None
         self._conn = None
+
+    async def aclose(self):
+        await self.close()
 
 
 def test_conn_collections_init():

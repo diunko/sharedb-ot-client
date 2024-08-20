@@ -7,6 +7,7 @@ setup(
     install_requires=[
         'asyncio',
         'quill-delta',
-        'websockets==11.*'
+        'websockets==11.*',
+        'loguru'
     ]
 )

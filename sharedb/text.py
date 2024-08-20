@@ -107,7 +107,6 @@ class Doc:
     def __repr__(self):
         return f'Doc(type={self.type} id={self.id}, coll_id={self.coll_id}, v={self.v}, data={self.data}, _inflight_op={self._inflight_op})'
 
-    @deprecated
     async def create(self, data: dict):
         assert self.v == 0
         assert self.data is None

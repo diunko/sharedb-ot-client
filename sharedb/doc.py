@@ -212,6 +212,8 @@ class Doc(Generic[T]):
     pending_ops: list[list[Op]] = field(default_factory=list)
     _inflight_op: DocOp = None
     _conn: 'client_v1.Connection' = None
+    _sync_task: 'asyncio.Task' = None
+    _sync_exception: Exception = None
 
     DocType: Type[T] = None
 
@@ -333,11 +335,23 @@ class Doc(Generic[T]):
     #     self._inflight_op = None
 
     async def sync(self, t=0.2):
-        await self._test_send_one_op()
+        assert self._sync_task is None
+        self._sync_task = asyncio.current_task()
 
-        # wait for outgoing op to be acked
-        while self._inflight_op is not None:
-            await asyncio.sleep(t)
+        try:
+
+            await self._test_send_one_op()
+
+            # wait for outgoing op to be acked
+            while self._inflight_op is not None:
+                if self._sync_exception is not None:
+                    raise self._sync_exception
+
+                await asyncio.sleep(t)
+
+        finally:
+            self._sync_task = None
+
 
     async def _test_send_one_op(self):
         assert 0 < len(self.pending_ops)
@@ -402,38 +416,47 @@ class Doc(Generic[T]):
         pass
 
     def _push_op_msg(self, op: 'proto.Op') -> 'proto.Op':
-        assert op.v == self.v
-        # transform all pending ops using transform(pending_op, doc_op, 'L')
-        # transform server op using transform(doc_op, pending_op, 'R')
+        try:
+            assert op.v == self.v
+            # transform all pending ops using transform(pending_op, doc_op, 'L')
+            # transform server op using transform(doc_op, pending_op, 'R')
 
-        # rebase in-fight op and buffer ops
-        # TODO: extend this to buffer ops as well
-        assert 0 == len(self.pending_ops), "only in-flight mode for now"
+            # rebase in-fight op and buffer ops
+            # TODO: extend this to buffer ops as well
+            DEBUG and print('testing in-flight mode', op)
 
-        DEBUG and print('_push_op_msg', op)
-        op_A = op
-        if self._inflight_op is not None:
-            op_B = self._inflight_op
+            assert 0 == len(self.pending_ops), "only in-flight mode for now"
 
-            ops_A1 = Json0.transform(op_A.op, op_B.op, 'right')
-            ops_B1 = Json0.transform(op_B.op, op_A.op, 'left')
+            DEBUG and print('_push_op_msg', op)
+            op_A = op
+            if self._inflight_op is not None:
+                op_B = self._inflight_op
 
-            # TODO: XXX inplace!
-            op_B.op = ops_B1
-            op_B.v = op_A.v + 1
+                ops_A1 = Json0.transform(op_A.op, op_B.op, 'right')
+                ops_B1 = Json0.transform(op_B.op, op_A.op, 'left')
 
-            op_A.op = ops_A1
-            # op_A.v += 1
+                # TODO: XXX inplace!
+                op_B.op = ops_B1
+                op_B.v = op_A.v + 1
 
-        # apply rebased op
-        Json0.apply(self.data, op_A.op)
-        self.v = op_A.v + 1
+                op_A.op = ops_A1
+                # op_A.v += 1
 
-        for op in op_A.op:
-            for sub in self.subscriptions:
-                sub(op)
+            # apply rebased op
+            Json0.apply(self.data, op_A.op)
+            self.v = op_A.v + 1
 
-        return op_A
+            for op in op_A.op:
+                for sub in self.subscriptions:
+                    sub(op)
+
+            return op_A
+        except Exception as e:
+            if self._sync_task is not None:
+                self._sync_exception = e
+            else:
+                DEBUG and print('re-raising exception outside sync function', op)
+                raise
 
     def _push_op(self, doc_op: DocOp):
         assert doc_op.v == self.v
