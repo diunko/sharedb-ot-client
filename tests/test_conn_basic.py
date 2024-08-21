@@ -38,15 +38,14 @@ async def test_doc_create_and_send_ops():
     print(doc)
 
     doc.apply([Op(p=['qux'], oi='bla2')])
+    ack_msg = await doc._test_send_one_op_and_wait_ack()
+    print('got ack', ack_msg)
+
     doc.apply([Op(p=['qux'], oi='bla3')])
+    ack_msg = await doc._test_send_one_op_and_wait_ack()
+    print('got ack', ack_msg)
+
     doc.apply([Op(p=['qux'], oi='bla4')])
-
-    ack_msg = await doc._test_send_one_op_and_wait_ack()
-    print('got ack', ack_msg)
-
-    ack_msg = await doc._test_send_one_op_and_wait_ack()
-    print('got ack', ack_msg)
-
     ack_msg = await doc._test_send_one_op_and_wait_ack()
     print('got ack', ack_msg)
 
@@ -96,15 +95,25 @@ async def test_doc_fetch():
 
     ack_msg = await d2._test_send_one_op_and_wait_ack()
     print('got ack', ack_msg)
+    # NOTE: now that apply always batches together all pending ops,
+    #   we need only 1 op send to send all pending updates
+    #   so below sends are commented out
 
-    ack_msg = await d2._test_send_one_op_and_wait_ack()
-    print('got ack', ack_msg)
+    # ack_msg = await d2._test_send_one_op_and_wait_ack()
+    # print('got ack', ack_msg)
 
-    ack_msg = await d2._test_send_one_op_and_wait_ack()
-    print('got ack', ack_msg)
+    # ack_msg = await d2._test_send_one_op_and_wait_ack()
+    # print('got ack', ack_msg)
+
+    await asyncio.sleep(1)
+
+    assert d2.data == {
+        'bla': 'qux',
+        'test': 'foo',
+        'qux': 'bla4'
+    }
 
     await conn.close()
-
 
 async def connect_and_fetch_doc(doc_id, coll_id) -> Doc:
     url = 'ws://localhost:17171'
@@ -140,20 +149,24 @@ async def test_doc_transform_ops():
 
     a1 = await d1._test_send_one_op_and_wait_ack()
     print('got ack', a1)
-    a1 = await d1._test_send_one_op_and_wait_ack()
-    print('got ack', a1)
-    a1 = await d1._test_send_one_op_and_wait_ack()
-    print('got ack', a1)
+    # NOTE: now that apply always batches together all pending ops,
+    #   we need only 1 op send to send all pending updates
+    #   so below sends are commented out
+
+    # a1 = await d1._test_send_one_op_and_wait_ack()
+    # print('got ack', a1)
+    # a1 = await d1._test_send_one_op_and_wait_ack()
+    # print('got ack', a1)
 
     o2 = await d2._conn.recv_dict()
     assert o2['a'] == 'op'
     print('got op on d2')
-    o2 = await d2._conn.recv_dict()
-    assert o2['a'] == 'op'
-    print('got op on d2')
-    o2 = await d2._conn.recv_dict()
-    assert o2['a'] == 'op'
-    print('got op on d2')
+    # o2 = await d2._conn.recv_dict()
+    # assert o2['a'] == 'op'
+    # print('got op on d2')
+    # o2 = await d2._conn.recv_dict()
+    # assert o2['a'] == 'op'
+    # print('got op on d2')
 
     d2.apply([Op(p=['qux'], oi='bla5')])
     a1 = await d2._test_send_one_op_wait_ops_and_ack()
@@ -165,6 +178,15 @@ async def test_doc_transform_ops():
     print('o_d1_2', o_d1_2)
     print('d1', d1)
     print('d2', d2)
+
+    assert d1.data == {
+        'bla': 'qux',
+        'qux': 'bla5'
+    }
+    assert d2.data == {
+        'bla': 'qux',
+        'qux': 'bla5'
+    }
 
     await asyncio.gather(
         d1._conn.close(),
@@ -187,10 +209,14 @@ async def test_conn_two_docs_sync():
     try:
         a1 = await d1._test_send_one_op_and_wait_ack()
         print('got ack', a1)
-        a1 = await d1._test_send_one_op_and_wait_ack()
-        print('got ack', a1)
-        a1 = await d1._test_send_one_op_and_wait_ack()
-        print('got ack', a1)
+        # NOTE: now that apply always batches together all pending ops,
+        #   we need only 1 op send to send all pending updates
+        #   so below sends are commented out
+
+        # a1 = await d1._test_send_one_op_and_wait_ack()
+        # print('got ack', a1)
+        # a1 = await d1._test_send_one_op_and_wait_ack()
+        # print('got ack', a1)
 
         # connection handles incoming ops for d2
         await asyncio.sleep(0.5)

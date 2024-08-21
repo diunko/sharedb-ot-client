@@ -65,7 +65,6 @@ async def test_doc_sync_one_op():
         }
 
 
-@pytest.mark.xfail
 @pytest.mark.asyncio
 async def test_doc_sync_two_ops():
     d1 = await connect_and_create_test_doc({
@@ -91,7 +90,6 @@ async def test_doc_sync_two_ops():
         }
 
 
-@pytest.mark.xfail
 @pytest.mark.asyncio
 async def test_doc_sync_concurrent_ops():
     d1 = await connect_and_create_test_doc({

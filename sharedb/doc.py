@@ -210,7 +210,7 @@ class Doc(Generic[T]):
     subscriptions: list = field(default_factory=list)
 
     pending_ops: list[list[Op]] = field(default_factory=list)
-    _inflight_op: DocOp = None
+    _inflight_op: 'proto.Op' = None
     _conn: 'client_v1.Connection' = None
     _sync_task: 'asyncio.Task' = None
     _sync_exception: Exception = None
@@ -282,7 +282,15 @@ class Doc(Generic[T]):
     def apply(self, ops: list[Op]):
         send_ops = deepcopy(ops)
         Json0.apply(self.data, ops)
-        self.pending_ops.append(send_ops)
+        self._extend_pending_ops(send_ops)
+
+    def _extend_pending_ops(self, ops: list[Op]):
+        if len(self.pending_ops) == 0:
+            self.pending_ops.append(ops)
+        else:
+            assert len(self.pending_ops) == 1
+            applied_ops = self.pending_ops[0]
+            applied_ops.extend(ops)
 
     def _next_seq(self):
         seq = self.seq
@@ -304,16 +312,6 @@ class Doc(Generic[T]):
         self._inflight_op = m
         return m
 
-    # def _shift_op(self) -> DocOp:
-    #     assert self._inflight_op is None
-    #     assert 0 < len(self.pending_ops)
-    #     ops0 = self.pending_ops.pop(0)
-    #     seq, op_id = self._next_seq()
-    #     d_o = DocOp(v=self.v, op=ops0, seq=seq, op_id=op_id,
-    #                 d=self.id, c=self.coll_id)
-    #     self._inflight_op = d_o
-    #     return d_o
-
     def _ack_msg(self, m: 'proto.Op'):
         m_inflight: proto.Op = None
         assert (m_inflight := self._inflight_op) is not None
@@ -324,15 +322,6 @@ class Doc(Generic[T]):
 
         self.v += 1
         self._inflight_op = None
-
-    # def _ack(self, op_id, v):
-    #     assert (op := self._inflight_op) is not None
-    #     assert self.v == v
-    #     assert op_id == op.op_id
-    #
-    #     self.v += 1
-    #
-    #     self._inflight_op = None
 
     async def sync(self, t=0.2):
         assert self._sync_task is None
@@ -356,7 +345,6 @@ class Doc(Generic[T]):
             self._sync_task = None
 
         DEBUG and print('sync exit', self.id)
-
 
     async def _test_send_one_op(self):
         assert 0 < len(self.pending_ops)
@@ -420,6 +408,24 @@ class Doc(Generic[T]):
     def _push_op1(self, ops: list[Op]):
         pass
 
+    def _transform_pending_ops(self, incoming_op: 'proto.Op') -> 'proto.Op':
+        if 0 == len(self.pending_ops):
+            return incoming_op
+        else:
+            assert 1 == len(self.pending_ops)
+            applied_ops = self.pending_ops[0]
+            incoming_op = deepcopy(incoming_op)
+
+            ops_A = incoming_op.op
+            ops_B = applied_ops
+
+            ops_A1 = Json0.transform(ops_A, ops_B, 'right')
+            ops_B1 = Json0.transform(ops_B, ops_A, 'left')
+
+            incoming_op.op = ops_A1
+            self.pending_ops[0] = ops_B1
+            return incoming_op
+
     def _push_op_msg(self, op: 'proto.Op') -> 'proto.Op':
         DEBUG and print('_push_op_msg enter', self._sync_task)
         try:
@@ -427,13 +433,11 @@ class Doc(Generic[T]):
             # transform all pending ops using transform(pending_op, doc_op, 'L')
             # transform server op using transform(doc_op, pending_op, 'R')
 
+            # assert 0 == len(self.pending_ops), "only in-flight mode for now"
+
             # rebase in-fight op and buffer ops
-            # TODO: extend this to buffer ops as well
-            DEBUG and print('testing in-flight mode', op)
-
-            assert 0 == len(self.pending_ops), "only in-flight mode for now"
-
             DEBUG and print('_push_op_msg', op)
+
             op_A = op
             if self._inflight_op is not None:
                 op_B = self._inflight_op
@@ -447,6 +451,9 @@ class Doc(Generic[T]):
 
                 op_A.op = ops_A1
                 # op_A.v += 1
+
+            if 0 < len(self.pending_ops):
+                op_A = self._transform_pending_ops(op)
 
             # apply rebased op
             Json0.apply(self.data, op_A.op)
